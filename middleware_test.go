@@ -251,6 +251,79 @@ func TestLoggingMiddleware(t *testing.T) {
 	}
 }
 
+func TestClientHintsMiddleware_InjectsHeaders(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Sec-Ch-Ua-Platform") == "" {
+			w.WriteHeader(400)
+			w.Write([]byte("missing sec-ch-ua-platform"))
+			return
+		}
+		if r.Header.Get("Sec-Ch-Ua-Mobile") == "" {
+			w.WriteHeader(400)
+			w.Write([]byte("missing sec-ch-ua-mobile"))
+			return
+		}
+		w.WriteHeader(200)
+	}))
+	defer server.Close()
+
+	client, err := NewClient()
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.Use(ClientHintsMiddleware)
+
+	headers := map[string]string{
+		"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+	}
+	_, _, status, err := client.Do("GET", server.URL, headers, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != 200 {
+		t.Fatalf("expected 200, got %d", status)
+	}
+}
+
+func TestClientHintsMiddleware_SkipsSafari(t *testing.T) {
+	base := func(req *Request) (*Response, error) {
+		if _, ok := req.Headers["sec-ch-ua"]; ok {
+			return nil, fmt.Errorf("Safari should not have sec-ch-ua")
+		}
+		return &Response{StatusCode: 200}, nil
+	}
+	handler := ClientHintsMiddleware(base)
+	_, err := handler(&Request{
+		Method:  "GET",
+		URL:     "http://example.com",
+		Headers: map[string]string{"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClientHintsMiddleware_NoOverride(t *testing.T) {
+	base := func(req *Request) (*Response, error) {
+		if req.Headers["sec-ch-ua-platform"] != `"Custom"` {
+			return nil, fmt.Errorf("expected custom platform, got %s", req.Headers["sec-ch-ua-platform"])
+		}
+		return &Response{StatusCode: 200}, nil
+	}
+	handler := ClientHintsMiddleware(base)
+	_, err := handler(&Request{
+		Method: "GET",
+		URL:    "http://example.com",
+		Headers: map[string]string{
+			"user-agent":        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+			"sec-ch-ua-platform": `"Custom"`,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoggingMiddleware_Error(t *testing.T) {
 	base := func(req *Request) (*Response, error) {
 		return nil, fmt.Errorf("connection refused")

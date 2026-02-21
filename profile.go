@@ -9,47 +9,174 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 )
 
-// BrowserProfile pairs a User-Agent string with a matching TLS fingerprint.
+// BrowserProfile pairs a User-Agent string with a matching TLS fingerprint
+// and metadata for filtering.
 type BrowserProfile struct {
 	UserAgent  string
 	TLSProfile profiles.ClientProfile
+	Browser    string // "chrome", "firefox", "safari", "edge"
+	OS         string // "windows", "macos", "linux", "android", "ios"
+	Mobile     bool
 }
 
-// BuiltinProfiles provides browser fingerprint diversity across Chrome, Safari, and Firefox.
-// Each entry pairs a UA with the correct TLS fingerprint so JA3 matches the UA claim.
+// BuiltinProfiles provides browser fingerprint diversity across Chrome, Safari,
+// Firefox, and Edge with per-OS variants.
 var BuiltinProfiles = []BrowserProfile{
+	// Chrome — Windows
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_131,
+		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "windows",
 	},
 	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
-		TLSProfile: profiles.Safari_16_0,
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		TLSProfile: profiles.Chrome_133, Browser: "chrome", OS: "windows",
+	},
+	// Chrome — macOS
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "macos",
 	},
 	{
-		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: profiles.Firefox_132,
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		TLSProfile: profiles.Chrome_133, Browser: "chrome", OS: "macos",
 	},
-	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_131,
-	},
+	// Chrome — Linux
 	{
 		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_131,
+		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "linux",
 	},
 	{
-		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: profiles.Firefox_132,
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		TLSProfile: profiles.Chrome_133, Browser: "chrome", OS: "linux",
+	},
+	// Chrome — Android
+	{
+		UserAgent:  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "android", Mobile: true,
+	},
+
+	// Safari — macOS
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
+		TLSProfile: profiles.Safari_16_0, Browser: "safari", OS: "macos",
 	},
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
-		TLSProfile: profiles.Safari_16_0,
+		TLSProfile: profiles.Safari_16_0, Browser: "safari", OS: "macos",
+	},
+	// Safari — iOS
+	{
+		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+		TLSProfile: profiles.Safari_IOS_18_0, Browser: "safari", OS: "ios", Mobile: true,
 	},
 	{
-		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_131,
+		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+		TLSProfile: profiles.Safari_IOS_17_0, Browser: "safari", OS: "ios", Mobile: true,
 	},
+
+	// Firefox — Windows
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+		TLSProfile: profiles.Firefox_133, Browser: "firefox", OS: "windows",
+	},
+	// Firefox — macOS
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+		TLSProfile: profiles.Firefox_133, Browser: "firefox", OS: "macos",
+	},
+	// Firefox — Linux
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+		TLSProfile: profiles.Firefox_133, Browser: "firefox", OS: "linux",
+	},
+
+	// Edge — Windows (uses Chrome TLS fingerprint — same Chromium engine)
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+		TLSProfile: profiles.Chrome_131, Browser: "edge", OS: "windows",
+	},
+	// Edge — macOS
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+		TLSProfile: profiles.Chrome_131, Browser: "edge", OS: "macos",
+	},
+}
+
+// ProfileOption configures profile filtering for RandomProfile.
+type ProfileOption func(*profileFilter)
+
+type profileFilter struct {
+	os      string
+	browser string
+	mobile  *bool
+}
+
+// WithOS filters profiles by operating system.
+// Valid values: "windows", "macos", "linux", "android", "ios".
+func WithOS(os string) ProfileOption {
+	return func(f *profileFilter) {
+		f.os = strings.ToLower(os)
+	}
+}
+
+// WithBrowser filters profiles by browser.
+// Valid values: "chrome", "firefox", "safari", "edge".
+func WithBrowser(b string) ProfileOption {
+	return func(f *profileFilter) {
+		f.browser = strings.ToLower(b)
+	}
+}
+
+// WithMobile filters for mobile or desktop profiles.
+func WithMobile(mobile bool) ProfileOption {
+	return func(f *profileFilter) {
+		f.mobile = &mobile
+	}
+}
+
+// RandomProfile returns a random BrowserProfile matching the given filters.
+// With no options, returns any profile. Returns a fallback if no profiles match.
+func RandomProfile(opts ...ProfileOption) BrowserProfile {
+	var f profileFilter
+	for _, o := range opts {
+		o(&f)
+	}
+
+	var candidates []BrowserProfile
+	for _, p := range BuiltinProfiles {
+		if f.os != "" && p.OS != f.os {
+			continue
+		}
+		if f.browser != "" && p.Browser != f.browser {
+			continue
+		}
+		if f.mobile != nil && p.Mobile != *f.mobile {
+			continue
+		}
+		candidates = append(candidates, p)
+	}
+
+	if len(candidates) == 0 {
+		return BuiltinProfiles[rand.IntN(len(BuiltinProfiles))]
+	}
+	return candidates[rand.IntN(len(candidates))]
+}
+
+// PlatformMatchedProfile returns a BrowserProfile whose OS matches
+// the actual runtime platform (runtime.GOOS).
+func PlatformMatchedProfile() BrowserProfile {
+	var goosToOS string
+	switch runtime.GOOS {
+	case "windows":
+		goosToOS = "windows"
+	case "darwin":
+		goosToOS = "macos"
+	case "linux":
+		goosToOS = "linux"
+	default:
+		return BuiltinProfiles[rand.IntN(len(BuiltinProfiles))]
+	}
+	return RandomProfile(WithOS(goosToOS), WithMobile(false))
 }
 
 // ClientHintsHeaders returns sec-ch-ua-* headers for Chromium-based UAs.
@@ -60,15 +187,27 @@ func ClientHintsHeaders(ua string) map[string]string {
 	}
 	version := ExtractChromeVersion(ua)
 	platform := extractPlatform(ua)
-	return map[string]string{
+	mobile := "?0"
+	if strings.Contains(ua, "Mobile") {
+		mobile = "?1"
+	}
+
+	hints := map[string]string{
 		"sec-ch-ua":          fmt.Sprintf(`"Chromium";v="%s", "Not_A Brand";v="24"`, version),
-		"sec-ch-ua-mobile":   "?0",
+		"sec-ch-ua-mobile":   mobile,
 		"sec-ch-ua-platform": fmt.Sprintf(`"%s"`, platform),
 	}
+
+	// Edge adds its own brand
+	if strings.Contains(ua, "Edg/") {
+		edgeVersion := extractEdgeVersion(ua)
+		hints["sec-ch-ua"] = fmt.Sprintf(`"Chromium";v="%s", "Microsoft Edge";v="%s", "Not_A Brand";v="24"`, version, edgeVersion)
+	}
+
+	return hints
 }
 
 // ExtractChromeVersion extracts the major Chrome version from a User-Agent string.
-// "...Chrome/131.0.0.0..." -> "131"
 func ExtractChromeVersion(ua string) string {
 	idx := strings.Index(ua, "Chrome/")
 	if idx == -1 {
@@ -82,45 +221,29 @@ func ExtractChromeVersion(ua string) string {
 	return rest[:dot]
 }
 
-// PlatformMatchedProfile returns a BrowserProfile whose User-Agent OS matches
-// the actual runtime platform (runtime.GOOS). This prevents fingerprint mismatch
-// where e.g. a "Windows" UA is sent from a Linux server.
-func PlatformMatchedProfile() BrowserProfile {
-	os := runtime.GOOS
-	var candidates []BrowserProfile
-	for _, p := range BuiltinProfiles {
-		if matchesOS(p.UserAgent, os) {
-			candidates = append(candidates, p)
-		}
+func extractEdgeVersion(ua string) string {
+	idx := strings.Index(ua, "Edg/")
+	if idx == -1 {
+		return "131"
 	}
-	if len(candidates) == 0 {
-		// Fallback to any profile
-		return BuiltinProfiles[rand.IntN(len(BuiltinProfiles))]
+	rest := ua[idx+4:]
+	dot := strings.IndexByte(rest, '.')
+	if dot == -1 {
+		return rest
 	}
-	return candidates[rand.IntN(len(candidates))]
+	return rest[:dot]
 }
 
-// matchesOS checks if a User-Agent string matches the given GOOS value.
-func matchesOS(ua, goos string) bool {
-	switch goos {
-	case "windows":
-		return strings.Contains(ua, "Windows")
-	case "darwin":
-		return strings.Contains(ua, "Macintosh")
-	case "linux":
-		return strings.Contains(ua, "Linux") || strings.Contains(ua, "X11")
-	default:
-		return false
-	}
-}
-
-// extractPlatform returns the OS platform from a User-Agent for sec-ch-ua-platform.
 func extractPlatform(ua string) string {
 	switch {
 	case strings.Contains(ua, "Windows"):
 		return "Windows"
-	case strings.Contains(ua, "Macintosh"):
+	case strings.Contains(ua, "Macintosh") || strings.Contains(ua, "Mac OS X"):
 		return "macOS"
+	case strings.Contains(ua, "Android"):
+		return "Android"
+	case strings.Contains(ua, "iPhone") || strings.Contains(ua, "iPad"):
+		return "iOS"
 	case strings.Contains(ua, "Linux"):
 		return "Linux"
 	default:

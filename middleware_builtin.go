@@ -116,6 +116,33 @@ func RateLimitMiddlewareWithContext(ctx context.Context, limiter *ratelimit.Doma
 	}
 }
 
+// ClientHintsMiddleware auto-injects sec-ch-ua-* headers for Chromium-based profiles.
+// This ensures Client Hints match the User-Agent, preventing fingerprint mismatch detection.
+func ClientHintsMiddleware(next Handler) Handler {
+	return func(req *Request) (*Response, error) {
+		if req.Headers == nil {
+			return next(req)
+		}
+		ua := req.Headers["user-agent"]
+		if ua == "" {
+			ua = req.Headers["User-Agent"]
+		}
+		if ua == "" {
+			return next(req)
+		}
+
+		hints := ClientHintsHeaders(ua)
+		for k, v := range hints {
+			// Don't override if consumer already set them
+			if _, exists := req.Headers[k]; !exists {
+				req.Headers[k] = v
+			}
+		}
+
+		return next(req)
+	}
+}
+
 // parseRetryAfterValue parses a Retry-After header value (seconds or HTTP-date).
 func parseRetryAfterValue(val string) time.Duration {
 	// Reuse logic from ParseRetryAfter but for a raw string value

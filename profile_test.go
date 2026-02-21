@@ -2,7 +2,6 @@ package stealth
 
 import (
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -17,6 +16,35 @@ func TestClientHintsHeaders_Chrome(t *testing.T) {
 	}
 	if h["sec-ch-ua-mobile"] != "?0" {
 		t.Fatalf("unexpected mobile: %s", h["sec-ch-ua-mobile"])
+	}
+}
+
+func TestClientHintsHeaders_ChromeMobile(t *testing.T) {
+	ua := "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"
+	h := ClientHintsHeaders(ua)
+	if h == nil {
+		t.Fatal("expected hints for mobile Chrome")
+	}
+	if h["sec-ch-ua-mobile"] != "?1" {
+		t.Fatalf("expected mobile ?1, got %s", h["sec-ch-ua-mobile"])
+	}
+	if h["sec-ch-ua-platform"] != `"Android"` {
+		t.Fatalf("expected Android platform, got %s", h["sec-ch-ua-platform"])
+	}
+}
+
+func TestClientHintsHeaders_Edge(t *testing.T) {
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+	h := ClientHintsHeaders(ua)
+	if h == nil {
+		t.Fatal("expected hints for Edge UA")
+	}
+	if h["sec-ch-ua-mobile"] != "?0" {
+		t.Fatalf("unexpected mobile: %s", h["sec-ch-ua-mobile"])
+	}
+	// Edge hints should include Microsoft Edge brand
+	if h["sec-ch-ua"] == "" {
+		t.Fatal("expected sec-ch-ua header")
 	}
 }
 
@@ -45,36 +73,113 @@ func TestExtractChromeVersion(t *testing.T) {
 	}
 }
 
+func TestRandomProfile_NoFilter(t *testing.T) {
+	p := RandomProfile()
+	if p.UserAgent == "" {
+		t.Fatal("expected non-empty profile")
+	}
+	if p.Browser == "" || p.OS == "" {
+		t.Fatalf("expected metadata, got browser=%q os=%q", p.Browser, p.OS)
+	}
+}
+
+func TestRandomProfile_ByOS(t *testing.T) {
+	for range 20 {
+		p := RandomProfile(WithOS("windows"))
+		if p.OS != "windows" {
+			t.Fatalf("expected windows profile, got os=%q: %s", p.OS, p.UserAgent)
+		}
+	}
+}
+
+func TestRandomProfile_ByBrowser(t *testing.T) {
+	for range 20 {
+		p := RandomProfile(WithBrowser("firefox"))
+		if p.Browser != "firefox" {
+			t.Fatalf("expected firefox profile, got browser=%q: %s", p.Browser, p.UserAgent)
+		}
+	}
+}
+
+func TestRandomProfile_ByCombination(t *testing.T) {
+	for range 20 {
+		p := RandomProfile(WithOS("macos"), WithBrowser("chrome"))
+		if p.OS != "macos" || p.Browser != "chrome" {
+			t.Fatalf("expected macos+chrome, got os=%q browser=%q", p.OS, p.Browser)
+		}
+	}
+}
+
+func TestRandomProfile_MobileOnly(t *testing.T) {
+	for range 20 {
+		p := RandomProfile(WithMobile(true))
+		if !p.Mobile {
+			t.Fatalf("expected mobile profile, got: %s", p.UserAgent)
+		}
+	}
+}
+
+func TestRandomProfile_DesktopOnly(t *testing.T) {
+	for range 20 {
+		p := RandomProfile(WithMobile(false))
+		if p.Mobile {
+			t.Fatalf("expected desktop profile, got mobile: %s", p.UserAgent)
+		}
+	}
+}
+
+func TestRandomProfile_EdgeWindows(t *testing.T) {
+	for range 20 {
+		p := RandomProfile(WithBrowser("edge"), WithOS("windows"))
+		if p.Browser != "edge" || p.OS != "windows" {
+			t.Fatalf("expected edge+windows, got browser=%q os=%q", p.Browser, p.OS)
+		}
+	}
+}
+
+func TestRandomProfile_FallbackOnNoMatch(t *testing.T) {
+	// Non-existent combo should fallback
+	p := RandomProfile(WithOS("freebsd"))
+	if p.UserAgent == "" {
+		t.Fatal("expected fallback profile")
+	}
+}
+
 func TestPlatformMatchedProfile(t *testing.T) {
 	p := PlatformMatchedProfile()
 	if p.UserAgent == "" {
 		t.Fatal("expected non-empty UserAgent")
 	}
+	if p.Mobile {
+		t.Fatal("PlatformMatchedProfile should return desktop")
+	}
 
-	// On Linux, should return a Linux/X11 profile
-	if runtime.GOOS == "linux" {
-		if !strings.Contains(p.UserAgent, "Linux") && !strings.Contains(p.UserAgent, "X11") {
-			t.Fatalf("on Linux, expected Linux UA, got: %s", p.UserAgent)
+	switch runtime.GOOS {
+	case "linux":
+		if p.OS != "linux" {
+			t.Fatalf("on linux, expected linux profile, got os=%q", p.OS)
+		}
+	case "darwin":
+		if p.OS != "macos" {
+			t.Fatalf("on darwin, expected macos profile, got os=%q", p.OS)
+		}
+	case "windows":
+		if p.OS != "windows" {
+			t.Fatalf("on windows, expected windows profile, got os=%q", p.OS)
 		}
 	}
 }
 
-func TestMatchesOS(t *testing.T) {
-	tests := []struct {
-		ua   string
-		goos string
-		want bool
-	}{
-		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "windows", true},
-		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "linux", false},
-		{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "darwin", true},
-		{"Mozilla/5.0 (X11; Linux x86_64)", "linux", true},
-		{"Mozilla/5.0 (X11; Ubuntu; Linux x86_64)", "linux", true},
-	}
-	for _, tt := range tests {
-		got := matchesOS(tt.ua, tt.goos)
-		if got != tt.want {
-			t.Errorf("matchesOS(%q, %q) = %v, want %v", tt.ua, tt.goos, got, tt.want)
+func TestBuiltinProfiles_AllHaveMetadata(t *testing.T) {
+	for i, p := range BuiltinProfiles {
+		if p.Browser == "" {
+			t.Errorf("profile %d missing Browser: %s", i, p.UserAgent)
+		}
+		if p.OS == "" {
+			t.Errorf("profile %d missing OS: %s", i, p.UserAgent)
+		}
+		if p.UserAgent == "" {
+			t.Errorf("profile %d has empty UserAgent", i)
 		}
 	}
 }
