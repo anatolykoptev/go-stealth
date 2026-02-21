@@ -6,10 +6,11 @@ import (
 
 // Request represents an outgoing HTTP request for the middleware chain.
 type Request struct {
-	Method  string
-	URL     string
-	Headers map[string]string
-	Body    io.Reader
+	Method      string
+	URL         string
+	Headers     map[string]string
+	Body        io.Reader
+	HeaderOrder []string // backend uses this for header ordering
 }
 
 // Response represents an HTTP response from the middleware chain.
