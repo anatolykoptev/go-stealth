@@ -1,7 +1,6 @@
 package ratelimit
 
 import (
-	"sync"
 	"time"
 )
 
@@ -17,72 +16,65 @@ var DefaultConfig = Config{
 	WindowDuration:    15 * time.Minute,
 }
 
-// Limiter tracks per-key sliding window rate limits.
-type Limiter struct {
-	mu     sync.Mutex
-	states map[string]*state
-	config Config
+// LimiterOption configures a Limiter.
+type LimiterOption func(*Limiter)
+
+// WithStore sets a custom store for the Limiter.
+// Default is an in-memory store.
+func WithStore(s Store) LimiterOption {
+	return func(l *Limiter) {
+		l.store = s
+	}
 }
 
-type state struct {
-	mu          sync.Mutex
-	requests    int
-	windowStart time.Time
-	blockedUtil time.Time
+// Limiter tracks per-key sliding window rate limits.
+type Limiter struct {
+	config Config
+	store  Store
 }
 
 // NewLimiter creates a rate limiter with the given config.
-func NewLimiter(cfg Config) *Limiter {
-	return &Limiter{
-		states: make(map[string]*state),
+func NewLimiter(cfg Config, opts ...LimiterOption) *Limiter {
+	l := &Limiter{
 		config: cfg,
+		store:  NewMemoryStore(),
 	}
+	for _, o := range opts {
+		o(l)
+	}
+	return l
 }
 
 // Allow returns true if a request can be made for the given key.
 // Atomically increments the counter when returning true.
 func (l *Limiter) Allow(key string) bool {
-	s := l.getState(key)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	now := time.Now()
 
-	if now.Before(s.blockedUtil) {
+	blocked := l.store.GetBlocked(key)
+	if now.Before(blocked) {
 		return false
 	}
 
-	if now.Sub(s.windowStart) > l.config.WindowDuration {
-		s.requests = 0
-		s.windowStart = now
-	}
-
-	if s.requests >= l.config.RequestsPerWindow {
-		return false
-	}
-
-	s.requests++
-	return true
+	count, _ := l.store.Increment(key, l.config.WindowDuration)
+	return count <= l.config.RequestsPerWindow
 }
 
 // MarkRateLimited sets the blocked-until time for a key (e.g. from a 429 response).
 func (l *Limiter) MarkRateLimited(key string, until time.Time) {
-	s := l.getState(key)
-	s.mu.Lock()
-	s.blockedUtil = until
-	s.mu.Unlock()
+	l.store.SetBlocked(key, until)
 }
 
-// IsRateLimited returns true if the key is currently blocked (read-only).
+// IsRateLimited returns true if the key is currently blocked.
 func (l *Limiter) IsRateLimited(key string) bool {
-	s := l.getState(key)
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
-	if now.Before(s.blockedUtil) {
+
+	blocked := l.store.GetBlocked(key)
+	if now.Before(blocked) {
 		return true
 	}
-	if s.requests >= l.config.RequestsPerWindow && now.Sub(s.windowStart) <= l.config.WindowDuration {
+
+	count, windowStart := l.store.Count(key, l.config.WindowDuration)
+	if count >= l.config.RequestsPerWindow && now.Sub(windowStart) <= l.config.WindowDuration {
 		return true
 	}
 	return false
@@ -91,19 +83,17 @@ func (l *Limiter) IsRateLimited(key string) bool {
 // AvailableAt returns the time when the given key will become available.
 // Returns zero time if available right now.
 func (l *Limiter) AvailableAt(key string) time.Time {
-	s := l.getState(key)
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
-
 	var earliest time.Time
 
-	if now.Before(s.blockedUtil) {
-		earliest = s.blockedUtil
+	blocked := l.store.GetBlocked(key)
+	if now.Before(blocked) {
+		earliest = blocked
 	}
 
-	if s.requests >= l.config.RequestsPerWindow {
-		windowEnd := s.windowStart.Add(l.config.WindowDuration)
+	count, windowStart := l.store.Count(key, l.config.WindowDuration)
+	if count >= l.config.RequestsPerWindow {
+		windowEnd := windowStart.Add(l.config.WindowDuration)
 		if now.Before(windowEnd) {
 			if earliest.IsZero() || windowEnd.Before(earliest) {
 				earliest = windowEnd
@@ -112,15 +102,4 @@ func (l *Limiter) AvailableAt(key string) time.Time {
 	}
 
 	return earliest
-}
-
-func (l *Limiter) getState(key string) *state {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	s, ok := l.states[key]
-	if !ok {
-		s = &state{windowStart: time.Now()}
-		l.states[key] = s
-	}
-	return s
 }
