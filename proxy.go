@@ -27,7 +27,7 @@ func ValidateProxy(client *BrowserClient, testURL string) error {
 		return err
 	}
 	if status >= 500 {
-		return &httpStatusError{StatusCode: status}
+		return &HttpStatusError{StatusCode: status}
 	}
 	return nil
 }

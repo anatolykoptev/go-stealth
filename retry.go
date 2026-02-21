@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"time"
@@ -54,6 +55,13 @@ func RetryDo[T any](ctx context.Context, rc RetryConfig, fn func() (T, error)) (
 			if wait > rc.MaxWait {
 				wait = rc.MaxWait
 			}
+			if rc.JitterPct > 0 {
+				jitter := float64(wait) * rc.JitterPct * (2*rand.Float64() - 1)
+				wait += time.Duration(jitter)
+				if wait < 0 {
+					wait = 0
+				}
+			}
 			slog.Debug("retrying", slog.Int("attempt", attempt+1), slog.Duration("wait", wait), slog.Any("error", err))
 			select {
 			case <-time.After(wait):
@@ -74,24 +82,26 @@ func RetryHTTP(ctx context.Context, rc RetryConfig, fn func() (*http.Response, e
 		}
 		if IsRetryableStatus(resp.StatusCode) {
 			resp.Body.Close()
-			return nil, &httpStatusError{StatusCode: resp.StatusCode}
+			return nil, &HttpStatusError{StatusCode: resp.StatusCode}
 		}
 		return resp, nil
 	})
 }
 
-// httpStatusError wraps a retryable HTTP status code.
-type httpStatusError struct {
+// HttpStatusError wraps a retryable HTTP status code.
+// Exported so consumers can use stealth.RetryDo/RetryHTTP directly
+// without reimplementing their own error type for errors.As matching.
+type HttpStatusError struct {
 	StatusCode int
 }
 
-func (e *httpStatusError) Error() string {
+func (e *HttpStatusError) Error() string {
 	return fmt.Sprintf("HTTP %d: %s", e.StatusCode, http.StatusText(e.StatusCode))
 }
 
 // IsRetryable returns true for transient errors worth retrying.
 func IsRetryable(err error) bool {
-	var httpErr *httpStatusError
+	var httpErr *HttpStatusError
 	if errors.As(err, &httpErr) {
 		return true
 	}

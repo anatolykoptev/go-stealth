@@ -1,6 +1,7 @@
 package stealth
 
 import (
+	"github.com/anatolykoptev/go-stealth/proxypool"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 )
@@ -10,6 +11,7 @@ type ClientOption func(*clientConfig)
 
 type clientConfig struct {
 	proxyURL     string
+	proxyPool    proxypool.ProxyPool
 	profile      profiles.ClientProfile
 	timeout      int
 	headerOrder  []string
@@ -63,5 +65,13 @@ func WithCookieJar(jar tls_client.CookieJar) ClientOption {
 func WithFollowRedirects() ClientOption {
 	return func(c *clientConfig) {
 		c.followRedirs = true
+	}
+}
+
+// WithProxyPool enables per-request proxy rotation.
+// Each call to Do() will cycle to the next proxy in the pool.
+func WithProxyPool(pool proxypool.ProxyPool) ClientOption {
+	return func(c *clientConfig) {
+		c.proxyPool = pool
 	}
 }

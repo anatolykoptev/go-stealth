@@ -3,9 +3,11 @@ package stealth
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"strings"
 
+	"github.com/anatolykoptev/go-stealth/proxypool"
 	fhttp "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 )
@@ -24,6 +26,7 @@ var DefaultHeaderOrder = []string{
 type BrowserClient struct {
 	client      tls_client.HttpClient
 	headerOrder []string
+	proxyPool   proxypool.ProxyPool // nil = no auto-rotation
 }
 
 // NewClient creates a BrowserClient with the given options.
@@ -61,13 +64,21 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		order = DefaultHeaderOrder
 	}
 
-	return &BrowserClient{client: client, headerOrder: order}, nil
+	return &BrowserClient{client: client, headerOrder: order, proxyPool: cfg.proxyPool}, nil
 }
 
 // Do executes an HTTP request with TLS fingerprint impersonation.
 // Returns (body bytes, response headers, HTTP status code, error).
 // Response headers are returned with lowercase canonical keys.
+// If a ProxyPool was configured via WithProxyPool, each call rotates to the next proxy.
 func (bc *BrowserClient) Do(method, urlStr string, headers map[string]string, body io.Reader) ([]byte, map[string]string, int, error) {
+	if bc.proxyPool != nil {
+		proxyURL := bc.proxyPool.Next()
+		if err := bc.SetProxy(proxyURL); err != nil {
+			slog.Warn("proxy: SetProxy failed", slog.String("proxy", MaskProxy(proxyURL)), slog.Any("error", err))
+		}
+	}
+
 	req, err := fhttp.NewRequest(method, urlStr, body)
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("build request: %w", err)
