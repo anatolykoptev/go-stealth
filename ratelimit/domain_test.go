@@ -143,6 +143,32 @@ func TestDomainLimiter_CatchallRule(t *testing.T) {
 	}
 }
 
+func TestDomainLimiter_RandomDelay(t *testing.T) {
+	dl := NewDomainLimiter(DomainConfig{
+		Domain:            "rand.example.com",
+		RequestsPerWindow: 100,
+		WindowDuration:    1 * time.Minute,
+		MinDelay:          10 * time.Millisecond,
+		RandomDelay:       50 * time.Millisecond,
+	})
+
+	if !dl.Allow("https://rand.example.com/page") {
+		t.Fatal("first request should be allowed")
+	}
+
+	// Immediate second request should be denied (MinDelay + RandomDelay not elapsed)
+	if dl.Allow("https://rand.example.com/page") {
+		t.Fatal("request too soon should be denied")
+	}
+
+	// After max possible delay (MinDelay + RandomDelay = 60ms), should be allowed
+	time.Sleep(70 * time.Millisecond)
+
+	if !dl.Allow("https://rand.example.com/page") {
+		t.Fatal("request after full delay should be allowed")
+	}
+}
+
 func TestExtractDomain(t *testing.T) {
 	tests := []struct {
 		input string

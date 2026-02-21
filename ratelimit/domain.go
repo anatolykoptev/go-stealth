@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"context"
+	"math/rand/v2"
 	"net/url"
 	"strings"
 	"sync"
@@ -60,10 +61,14 @@ func (dl *DomainLimiter) Allow(rawURL string) bool {
 	dl.mu.Lock()
 	defer dl.mu.Unlock()
 
-	// Check min delay
-	if rule.MinDelay > 0 {
+	// Check min delay (+ optional random delay)
+	if rule.MinDelay > 0 || rule.RandomDelay > 0 {
 		if last, ok := dl.lastReq[domain]; ok {
-			if time.Since(last) < rule.MinDelay {
+			delay := rule.MinDelay
+			if rule.RandomDelay > 0 {
+				delay += time.Duration(rand.Int64N(int64(rule.RandomDelay)))
+			}
+			if time.Since(last) < delay {
 				return false
 			}
 		}

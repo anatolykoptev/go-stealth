@@ -93,17 +93,15 @@ func (hp *HealthyProxyPool) Next() string {
 	for i := 0; i < poolLen; i++ {
 		proxy := hp.pool.Next()
 
-		hp.mu.RLock()
+		hp.mu.Lock()
 		h, exists := hp.tracker[proxy]
-		hp.mu.RUnlock()
-
 		if !exists {
+			hp.mu.Unlock()
 			return proxy
 		}
 
 		// Reactivate if cooldown expired
 		if !h.DeactivateAt.IsZero() && now.After(h.DeactivateAt.Add(hp.config.Cooldown)) {
-			hp.mu.Lock()
 			h.DeactivateAt = time.Time{}
 			h.Successes = 0
 			h.Failures = 0
@@ -111,8 +109,10 @@ func (hp *HealthyProxyPool) Next() string {
 			return proxy
 		}
 
-		// Skip deactivated
-		if !h.DeactivateAt.IsZero() {
+		deactivated := !h.DeactivateAt.IsZero()
+		hp.mu.Unlock()
+
+		if deactivated {
 			continue
 		}
 
