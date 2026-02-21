@@ -17,6 +17,7 @@ type clientConfig struct {
 	headerOrder  []string
 	cookieJar    tls_client.CookieJar
 	followRedirs bool
+	debug        bool
 }
 
 func defaultConfig() *clientConfig {
@@ -65,6 +66,14 @@ func WithCookieJar(jar tls_client.CookieJar) ClientOption {
 func WithFollowRedirects() ClientOption {
 	return func(c *clientConfig) {
 		c.followRedirs = true
+	}
+}
+
+// WithDebug enables request/response logging via slog.Debug.
+// Automatically adds LoggingMiddleware to the middleware chain.
+func WithDebug() ClientOption {
+	return func(c *clientConfig) {
+		c.debug = true
 	}
 }
 
