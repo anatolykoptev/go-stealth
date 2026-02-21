@@ -9,11 +9,11 @@ import (
 
 // ProxyHealth holds per-proxy health statistics.
 type ProxyHealth struct {
-	Successes    int64
-	Failures     int64
-	TotalLatency time.Duration
-	LastUsed     time.Time
-	DeactivateAt time.Time // zero = active
+	Successes    int64         `json:"successes"`
+	Failures     int64         `json:"failures"`
+	TotalLatency time.Duration `json:"total_latency"`
+	LastUsed     time.Time     `json:"last_used"`
+	DeactivateAt time.Time     `json:"deactivate_at"` // zero = active
 }
 
 // SuccessRate returns the fraction of successful requests (0.0–1.0).
@@ -57,17 +57,20 @@ var DefaultHealthyConfig = HealthyConfig{
 	Cooldown:         5 * time.Minute,
 }
 
+// HealthyPoolOption configures a HealthyProxyPool.
+type HealthyPoolOption func(*HealthyProxyPool)
+
 // HealthyProxyPool wraps any ProxyPool with per-proxy health tracking.
 // Dead proxies are skipped automatically and reactivated after a cooldown.
 type HealthyProxyPool struct {
-	pool    ProxyPool
-	config  HealthyConfig
-	mu      sync.RWMutex
-	tracker map[string]*ProxyHealth
+	pool   ProxyPool
+	config HealthyConfig
+	store  HealthStore
+	mu     sync.Mutex // protects multi-step read-modify-write on store
 }
 
 // NewHealthyPool wraps a ProxyPool with health tracking.
-func NewHealthyPool(pool ProxyPool, cfg HealthyConfig) *HealthyProxyPool {
+func NewHealthyPool(pool ProxyPool, cfg HealthyConfig, opts ...HealthyPoolOption) *HealthyProxyPool {
 	if cfg.FailureThreshold <= 0 {
 		cfg.FailureThreshold = DefaultHealthyConfig.FailureThreshold
 	}
@@ -77,11 +80,15 @@ func NewHealthyPool(pool ProxyPool, cfg HealthyConfig) *HealthyProxyPool {
 	if cfg.Cooldown <= 0 {
 		cfg.Cooldown = DefaultHealthyConfig.Cooldown
 	}
-	return &HealthyProxyPool{
-		pool:    pool,
-		config:  cfg,
-		tracker: make(map[string]*ProxyHealth),
+	hp := &HealthyProxyPool{
+		pool:   pool,
+		config: cfg,
+		store:  NewMemoryHealthStore(),
 	}
+	for _, o := range opts {
+		o(hp)
+	}
+	return hp
 }
 
 // Next returns the next healthy proxy. Skips deactivated proxies.
@@ -94,7 +101,7 @@ func (hp *HealthyProxyPool) Next() string {
 		proxy := hp.pool.Next()
 
 		hp.mu.Lock()
-		h, exists := hp.tracker[proxy]
+		h, exists := hp.store.Get(proxy)
 		if !exists {
 			hp.mu.Unlock()
 			return proxy
@@ -105,6 +112,7 @@ func (hp *HealthyProxyPool) Next() string {
 			h.DeactivateAt = time.Time{}
 			h.Successes = 0
 			h.Failures = 0
+			hp.store.Set(proxy, h)
 			hp.mu.Unlock()
 			return proxy
 		}
@@ -139,11 +147,7 @@ func (hp *HealthyProxyPool) TransportProxy() func(*http.Request) (*url.URL, erro
 func (hp *HealthyProxyPool) RecordSuccess(proxy string, latency time.Duration) {
 	hp.mu.Lock()
 	defer hp.mu.Unlock()
-
-	h := hp.getOrCreate(proxy)
-	h.Successes++
-	h.TotalLatency += latency
-	h.LastUsed = time.Now()
+	recordSuccessToStore(hp.store, proxy, latency)
 }
 
 // RecordFailure records a failed request through the given proxy.
@@ -151,37 +155,24 @@ func (hp *HealthyProxyPool) RecordSuccess(proxy string, latency time.Duration) {
 func (hp *HealthyProxyPool) RecordFailure(proxy string, latency time.Duration) {
 	hp.mu.Lock()
 	defer hp.mu.Unlock()
-
-	h := hp.getOrCreate(proxy)
-	h.Failures++
-	h.TotalLatency += latency
-	h.LastUsed = time.Now()
-
-	total := h.Successes + h.Failures
-	if total >= hp.config.MinRequests && h.SuccessRate() < (1-hp.config.FailureThreshold) {
-		h.DeactivateAt = time.Now()
-	}
+	recordFailureToStore(hp.store, proxy, latency, hp.config)
 }
 
 // Stats returns a snapshot of health stats for all tracked proxies.
 func (hp *HealthyProxyPool) Stats() map[string]ProxyHealth {
-	hp.mu.RLock()
-	defer hp.mu.RUnlock()
-
-	result := make(map[string]ProxyHealth, len(hp.tracker))
-	for k, v := range hp.tracker {
-		result[k] = *v
-	}
-	return result
+	hp.mu.Lock()
+	defer hp.mu.Unlock()
+	return hp.store.All()
 }
 
 // ActiveCount returns the number of currently active (non-deactivated) proxies.
 func (hp *HealthyProxyPool) ActiveCount() int {
-	hp.mu.RLock()
-	defer hp.mu.RUnlock()
+	hp.mu.Lock()
+	defer hp.mu.Unlock()
 
+	all := hp.store.All()
 	active := hp.pool.Len()
-	for _, h := range hp.tracker {
+	for _, h := range all {
 		if !h.DeactivateAt.IsZero() && time.Now().Before(h.DeactivateAt.Add(hp.config.Cooldown)) {
 			active--
 		}
@@ -190,13 +181,4 @@ func (hp *HealthyProxyPool) ActiveCount() int {
 		active = 0
 	}
 	return active
-}
-
-func (hp *HealthyProxyPool) getOrCreate(proxy string) *ProxyHealth {
-	h, ok := hp.tracker[proxy]
-	if !ok {
-		h = &ProxyHealth{}
-		hp.tracker[proxy] = h
-	}
-	return h
 }
