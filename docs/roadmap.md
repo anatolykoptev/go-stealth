@@ -1,248 +1,154 @@
 # go-stealth Roadmap
 
-## Current State (v0.2.0)
+## Current State (v1.0.0)
 
-**769 LOC production code** across 4 packages:
+**2685 LOC production, 2277 LOC tests** across 5 packages, 26 production files, 14 test files.
 
-| Package | LOC | Purpose |
-|---------|-----|---------|
-| `stealth` (root) | 501 | BrowserClient, retry, backoff, jitter, profiles, UA |
-| `pool/` | 317 | Generic identity pool with health tracking |
-| `ratelimit/` | 126 | Per-key sliding window rate limiter |
-| `proxypool/` | 107 | ProxyPool interface + Webshare provider |
+| Package | Files | LOC | Purpose |
+|---------|-------|-----|---------|
+| `stealth` (root) | 14 | 1526 | BrowserClient, middleware, profiles, retry, backoff, jitter, UA, proxy, backends, roundtripper |
+| `pool/` | 3 | 378 | Generic identity pool with health tracking |
+| `proxypool/` | 4 | 371 | ProxyPool interface, Webshare provider, health tracking with pluggable store |
+| `ratelimit/` | 3 | 362 | Per-key sliding window + per-domain rate limiting with pluggable store |
+| `session/` | 2 | 281 | Session management with persistence (FileStore) |
 
 **Consumers**: go-search, go-hully (via go-twitter), go-job
 
----
-
-## Phase 1: Foundation Hardening (v0.3.0)
-
-*Goal: Fix known gaps, improve reliability.*
-
-### 1.1 Proxy Health Tracking
-**Source**: httpcloak's connection pool health checks
-
-Add health monitoring to `ProxyPool`:
-- Track success/failure rate per proxy
-- Auto-skip dead proxies (configurable threshold)
-- `ProxyPool.Stats()` — success rate, avg latency per proxy
-- Cooldown for failing proxies with auto-reactivation
-
-```go
-type HealthyProxyPool struct {
-    pool      ProxyPool
-    tracker   map[string]*ProxyHealth  // per-proxy stats
-    threshold float64                   // failure rate to deactivate
-}
-```
-
-### 1.2 Retry-After Header Parsing
-**Source**: RFC 7231
-
-When receiving 429, parse `Retry-After` header and integrate with `Limiter.MarkRateLimited()`:
-
-```go
-func ParseRetryAfter(resp *http.Response) time.Duration
-```
-
-### 1.3 Per-Domain Rate Limiting
-**Source**: colly's `LimitRule`
-
-Extend `ratelimit.Limiter` with domain-aware limiting:
-
-```go
-type DomainConfig struct {
-    Domain           string
-    RequestsPerWindow int
-    WindowDuration   time.Duration
-    Delay            time.Duration  // min delay between requests
-}
-```
-
-### 1.4 Proxypool Tests
-**Current gap**: 0% test coverage for proxypool package.
-- Mock Webshare API responses
-- Test round-robin rotation
-- Test error handling (empty response, auth failure)
-
-### 1.5 Platform Auto-Detection
-**Source**: httpcloak's `runtime.GOOS`
-
-Match User-Agent OS to actual platform:
-```go
-func PlatformMatchedProfile() BrowserProfile  // picks Chrome-Windows on Windows, etc.
-```
+**Tags**: v0.1.0 → v0.2.0 → v0.3.0 → v0.4.0 → v0.5.0 → v0.6.0 → v1.0.0
 
 ---
 
-## Phase 2: Middleware & Extensibility (v0.4.0)
+## Phase 1: Foundation Hardening (v0.3.0) ✅
 
-*Goal: Make go-stealth extensible without forking.*
+*Proxy health, retry-after, domain rate limiting, proxypool tests, platform detection.*
 
-### 2.1 Request/Response Middleware
-**Source**: surf's priority-ordered middleware system
-
-```go
-type Middleware func(next Handler) Handler
-type Handler func(req *Request) (*Response, error)
-
-func (bc *BrowserClient) Use(mw ...Middleware)
-```
-
-Built-in middleware:
-- `LoggingMiddleware` — request/response logging
-- `MetricsMiddleware` — success/failure counters per domain
-- `RetryMiddleware` — configurable retry with backoff
-- `RateLimitMiddleware` — domain-aware rate limiting
-
-### 2.2 http.RoundTripper Interface
-**Source**: spoofed-round-tripper, surf's `Std()`
-
-Expose `BrowserClient` as standard `http.RoundTripper`:
-```go
-func (bc *BrowserClient) RoundTrip(req *http.Request) (*http.Response, error)
-func (bc *BrowserClient) StdClient() *http.Client
-```
-
-This enables using go-stealth with any Go HTTP library (resty, go-retryablehttp, etc.).
-
-### 2.3 Request Context & Debug Mode
-**Source**: azuretls's request dump
-
-```go
-func WithDebug() ClientOption          // enable request/response logging
-func WithRequestID() Middleware        // attach unique ID to each request
-```
+- `proxypool/healthy.go` — HealthyProxyPool wrapper: per-proxy success/failure tracking, auto-skip dead proxies, cooldown with auto-reactivation, Stats(), ActiveCount()
+- `retry.go` — ParseRetryAfter() for RFC 7231 delta-seconds and HTTP-date formats
+- `ratelimit/domain.go` — DomainLimiter with wildcard matching, MinDelay, RandomDelay, Wait() with context
+- `proxypool/webshare_test.go` — mock Webshare API tests
+- `profile.go` — PlatformMatchedProfile() matching runtime.GOOS
 
 ---
 
-## Phase 3: Advanced Browser Impersonation (v0.5.0)
+## Phase 2: Middleware & Extensibility (v0.4.0) ✅
 
-*Goal: Match surf/httpcloak's impersonation quality.*
+*Middleware chain, http.RoundTripper, debug mode.*
 
-### 3.1 Per-OS Browser Profiles
-**Source**: surf's per-OS variants
+- `middleware.go` — Request, Response, Handler, Middleware types, Chain() composition
+- `middleware_builtin.go` — LoggingMiddleware, RetryMiddleware, RetryMiddlewareWithContext, RateLimitMiddleware, RateLimitMiddlewareWithContext, ClientHintsMiddleware
+- `client.go` — BrowserClient.Use() for middleware registration, lazy handler chain building
+- `roundtripper.go` — http.RoundTripper interface, StdClient() for net/http compatibility
+- `client_options.go` — WithDebug() auto-adds LoggingMiddleware
 
-Expand from 8 flat profiles to OS-specific variants:
+---
 
-| Browser | Windows | macOS | Linux | Android | iOS |
-|---------|---------|-------|-------|---------|-----|
-| Chrome 131+ | yes | yes | yes | yes | - |
-| Safari 18+ | - | yes | - | - | yes |
-| Firefox 133+ | yes | yes | yes | - | - |
-| Edge 131+ | yes | yes | - | - | - |
+## Phase 3: Advanced Browser Impersonation (v0.5.0) ✅
 
-```go
-func RandomProfile(opts ...ProfileOption) BrowserProfile
-func WithOS(os string) ProfileOption       // "windows", "macos", "linux", "android", "ios"
-func WithBrowser(b string) ProfileOption   // "chrome", "firefox", "safari", "edge"
+*18 per-OS profiles, Client Hints middleware, session management.*
+
+- `profile.go` — 18 profiles (Chrome Win/Mac/Linux/Android, Safari Mac/iOS, Firefox Win/Mac/Linux, Edge Win/Mac). RandomProfile() with WithOS/WithBrowser/WithMobile filters. ClientHintsHeaders() for mobile and Edge
+- `middleware_builtin.go` — ClientHintsMiddleware auto-injects sec-ch-ua-* headers, skips Safari/Firefox
+- `session/session.go` — Session struct with ID, timestamps (atomic), request counting, fixed profile + cookie jar. New(), Do(), Profile(), Age(), IdleTime()
+
+---
+
+## Phase 4: Pluggable TLS Backend (v0.6.0) ✅
+
+*HTTPDoer interface, TLSProfile type, stdlib backend.*
+
+- `backend.go` — HTTPDoer interface, BackendConfig, BackendFactory, TLSProfile string type with constants (ProfileChrome131, ProfileFirefox133, etc.)
+- `backend_tlsclient.go` — bogdanfinn/tls-client wrapper. ALL tls-client/fhttp imports isolated here. Profile mapping via profileMap
+- `backend_std.go` — net/http fallback. No fingerprinting, uses standard cookiejar. For testing and CGO-free environments
+- `client_options.go` — WithBackend(), WithStdHTTP(), WithHTTP3(), WithProfile(TLSProfile)
+- `middleware.go` — Request.HeaderOrder field, backends handle ordering internally
+
+**Breaking changes from v0.5.0**: WithProfile() takes `TLSProfile` (string) instead of `profiles.ClientProfile` (struct). WithCookieJar() removed. BrowserProfile.TLSProfile type changed.
+
+---
+
+## Phase 5: Distributed Operations (v1.0.0) ✅
+
+*Pluggable storage interfaces for distributed deployments.*
+
+- `session/store.go` — SessionStore interface (Save/Load/List/Delete) + FileStore (JSON files on disk)
+- `ratelimit/store.go` — Store interface (Increment/Count/SetBlocked/GetBlocked) + in-memory default. Limiter accepts WithStore() option
+- `proxypool/healthstore.go` — HealthStore interface (Get/Set/All) + in-memory default. HealthyProxyPool accepts WithHealthStore() option
+
+All interfaces enable Redis/etcd backing without adding dependencies to go-stealth. In-memory stores are the default — existing behavior unchanged.
+
+---
+
+## Architecture
+
 ```
-
-### 3.2 Client Hints Auto-Detection
-**Source**: httpcloak's Accept-CH parsing
-
-When server sends `Accept-CH` header, auto-generate matching Client Hints:
-```go
-func (bc *BrowserClient) DoWithHints(method, url string, headers map[string]string, body io.Reader) ([]byte, map[string]string, int, error)
-```
-
-### 3.3 Session Management
-**Source**: httpcloak's session abstraction
-
-```go
-type Session struct {
-    ID           string
-    CreatedAt    time.Time
-    LastUsed     time.Time
-    RequestCount int64
-    CookieJar    CookieJar
-    Profile      BrowserProfile
-}
-
-func NewSession(opts ...SessionOption) *Session
-func (s *Session) Do(method, url string, ...) ([]byte, map[string]string, int, error)
+go-stealth/
+├── backend.go              # HTTPDoer interface, TLSProfile, BackendConfig
+├── backend_tlsclient.go    # bogdanfinn/tls-client (default backend)
+├── backend_std.go          # net/http fallback
+├── client.go               # BrowserClient: middleware chain, proxy rotation
+├── client_options.go       # Functional options: WithProxy, WithProfile, WithStdHTTP, etc.
+├── middleware.go            # Request/Response/Handler/Middleware types, Chain()
+├── middleware_builtin.go   # Logging, Retry, RateLimit, ClientHints middlewares
+├── roundtripper.go         # http.RoundTripper + StdClient()
+├── profile.go              # 18 BrowserProfiles, RandomProfile(), ClientHintsHeaders()
+├── retry.go                # RetryDo[T](), RetryConfig, ParseRetryAfter()
+├── backoff.go              # BackoffConfig, exponential with jitter
+├── jitter.go               # Jitter{Min,Max}, Sleep(ctx)
+├── proxy.go                # MaskProxy(), ValidateProxy()
+├── ua.go                   # RandomUserAgent(), ChromeHeaders()
+├── pool/
+│   ├── pool.go             # Pool[T Identity] — generic round-robin with health
+│   ├── identity.go         # Identity interface, HealthTracker
+│   └── options.go          # PoolConfig
+├── proxypool/
+│   ├── proxypool.go        # ProxyPool interface
+│   ├── webshare.go         # Webshare API provider
+│   ├── healthy.go          # HealthyProxyPool wrapper
+│   └── healthstore.go      # HealthStore interface + in-memory impl
+├── ratelimit/
+│   ├── ratelimit.go        # Limiter — per-key sliding window
+│   ├── domain.go           # DomainLimiter — per-domain with wildcards
+│   └── store.go            # Store interface + in-memory impl
+└── session/
+    ├── session.go           # Session — stateful browsing context
+    └── store.go             # SessionStore interface + FileStore (JSON)
 ```
 
 ---
 
-## Phase 4: Pluggable TLS Backend (v0.6.0)
-
-*Goal: Support multiple TLS engines, not just bogdanfinn/tls-client.*
-
-### 4.1 TLS Backend Interface
+## Key Interfaces
 
 ```go
-type TLSBackend interface {
+// TLS backend (Phase 4)
+type HTTPDoer interface {
     Do(req *Request) (*Response, error)
     SetProxy(url string) error
-    GetCookieValue(url, name string) string
+    GetCookieValue(rawURL, name string) string
 }
 
-// Implementations:
-type TLSClientBackend struct { ... }   // bogdanfinn/tls-client (current)
-type SurfBackend struct { ... }         // enetx/surf (future)
-type StdBackend struct { ... }          // net/http (fallback, no fingerprint)
-```
-
-### 4.2 HTTP/3 QUIC Support
-**Source**: surf, httpcloak, tls-client
-
-If using tls-client or surf backend, enable HTTP/3:
-```go
-func WithHTTP3() ClientOption
-```
-
----
-
-## Phase 5: Distributed Operations (v1.0.0)
-
-*Goal: Scale across multiple instances.*
-
-### 5.1 Distributed Rate Limiting
-**Source**: mennanov/limiters
-
-Support Redis/etcd backends for rate limiting across instances:
-```go
-func NewDistributedLimiter(cfg Config, backend Backend) *Limiter
-```
-
-### 5.2 Distributed Proxy Health
-Share proxy health scores across instances via Redis:
-```go
-type SharedProxyPool struct {
-    local  ProxyPool
-    redis  *redis.Client
-    prefix string
+// Rate limit storage (Phase 5)
+type Store interface {
+    Increment(key string, window time.Duration) (count int, windowStart time.Time)
+    Count(key string, window time.Duration) (count int, windowStart time.Time)
+    SetBlocked(key string, until time.Time)
+    GetBlocked(key string) time.Time
 }
-```
 
-### 5.3 Session Persistence
-**Source**: httpcloak's session cache backend
+// Proxy health storage (Phase 5)
+type HealthStore interface {
+    Get(proxy string) (ProxyHealth, bool)
+    Set(proxy string, h ProxyHealth)
+    All() map[string]ProxyHealth
+}
 
-Persist sessions (cookies, request count, TLS state) to disk/Redis:
-```go
+// Session persistence (Phase 5)
 type SessionStore interface {
-    Save(session *Session) error
+    Save(s *Session) error
     Load(id string) (*Session, error)
+    List() ([]string, error)
+    Delete(id string) error
 }
 ```
-
----
-
-## Priority Matrix
-
-| Feature | Impact | Effort | Phase | Consumer Need |
-|---------|--------|--------|-------|---------------|
-| Proxy health tracking | High | Medium | 1 | go-search (dead proxy retry) |
-| Retry-After parsing | Medium | Low | 1 | all consumers |
-| Per-domain rate limiting | Medium | Low | 1 | go-hully (Twitter limits) |
-| Proxypool tests | Medium | Low | 1 | reliability |
-| Middleware system | High | Medium | 2 | extensibility |
-| RoundTripper interface | High | Low | 2 | std lib compat |
-| Per-OS profiles | Medium | Medium | 3 | detection bypass |
-| Session management | Medium | Medium | 3 | stateful scraping |
-| Pluggable TLS backend | High | High | 4 | future-proofing |
-| Distributed rate limiting | Low | High | 5 | multi-instance |
 
 ---
 
@@ -253,3 +159,4 @@ type SessionStore interface {
 - **Cloudflare solver** — too target-specific, consumer responsibility
 - **Multi-lang FFI** — Go-only for now
 - **JavaScript rendering** — different layer entirely
+- **Redis dependency** — storage interfaces enable it, but the module stays dependency-free
