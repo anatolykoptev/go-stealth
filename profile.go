@@ -5,15 +5,13 @@ import (
 	"math/rand/v2"
 	"runtime"
 	"strings"
-
-	"github.com/bogdanfinn/tls-client/profiles"
 )
 
 // BrowserProfile pairs a User-Agent string with a matching TLS fingerprint
 // and metadata for filtering.
 type BrowserProfile struct {
 	UserAgent  string
-	TLSProfile profiles.ClientProfile
+	TLSProfile TLSProfile
 	Browser    string // "chrome", "firefox", "safari", "edge"
 	OS         string // "windows", "macos", "linux", "android", "ios"
 	Mobile     bool
@@ -25,80 +23,80 @@ var BuiltinProfiles = []BrowserProfile{
 	// Chrome — Windows
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "windows",
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "windows",
 	},
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_133, Browser: "chrome", OS: "windows",
+		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "windows",
 	},
 	// Chrome — macOS
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "macos",
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "macos",
 	},
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_133, Browser: "chrome", OS: "macos",
+		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "macos",
 	},
 	// Chrome — Linux
 	{
 		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "linux",
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "linux",
 	},
 	{
 		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		TLSProfile: profiles.Chrome_133, Browser: "chrome", OS: "linux",
+		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "linux",
 	},
 	// Chrome — Android
 	{
 		UserAgent:  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-		TLSProfile: profiles.Chrome_131, Browser: "chrome", OS: "android", Mobile: true,
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "android", Mobile: true,
 	},
 
 	// Safari — macOS
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
-		TLSProfile: profiles.Safari_16_0, Browser: "safari", OS: "macos",
+		TLSProfile: ProfileSafari16, Browser: "safari", OS: "macos",
 	},
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
-		TLSProfile: profiles.Safari_16_0, Browser: "safari", OS: "macos",
+		TLSProfile: ProfileSafari16, Browser: "safari", OS: "macos",
 	},
 	// Safari — iOS
 	{
 		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-		TLSProfile: profiles.Safari_IOS_18_0, Browser: "safari", OS: "ios", Mobile: true,
+		TLSProfile: ProfileSafariIOS18, Browser: "safari", OS: "ios", Mobile: true,
 	},
 	{
 		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-		TLSProfile: profiles.Safari_IOS_17_0, Browser: "safari", OS: "ios", Mobile: true,
+		TLSProfile: ProfileSafariIOS17, Browser: "safari", OS: "ios", Mobile: true,
 	},
 
 	// Firefox — Windows
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: profiles.Firefox_133, Browser: "firefox", OS: "windows",
+		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "windows",
 	},
 	// Firefox — macOS
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: profiles.Firefox_133, Browser: "firefox", OS: "macos",
+		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "macos",
 	},
 	// Firefox — Linux
 	{
 		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: profiles.Firefox_133, Browser: "firefox", OS: "linux",
+		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "linux",
 	},
 
 	// Edge — Windows (uses Chrome TLS fingerprint — same Chromium engine)
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
-		TLSProfile: profiles.Chrome_131, Browser: "edge", OS: "windows",
+		TLSProfile: ProfileChrome131, Browser: "edge", OS: "windows",
 	},
 	// Edge — macOS
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
-		TLSProfile: profiles.Chrome_131, Browser: "edge", OS: "macos",
+		TLSProfile: ProfileChrome131, Browser: "edge", OS: "macos",
 	},
 }
 

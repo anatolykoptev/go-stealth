@@ -1,28 +1,23 @@
 package stealth
 
-import (
-	"github.com/anatolykoptev/go-stealth/proxypool"
-	tls_client "github.com/bogdanfinn/tls-client"
-	"github.com/bogdanfinn/tls-client/profiles"
-)
-
 // ClientOption configures a BrowserClient.
 type ClientOption func(*clientConfig)
 
 type clientConfig struct {
 	proxyURL     string
-	proxyPool    proxypool.ProxyPool
-	profile      profiles.ClientProfile
+	proxyPool    ProxyPoolProvider
+	profile      TLSProfile
 	timeout      int
 	headerOrder  []string
-	cookieJar    tls_client.CookieJar
 	followRedirs bool
 	debug        bool
+	backend      BackendFactory
+	http3        bool
 }
 
 func defaultConfig() *clientConfig {
 	return &clientConfig{
-		profile: profiles.Chrome_131,
+		profile: ProfileChrome131,
 		timeout: 20,
 	}
 }
@@ -34,8 +29,8 @@ func WithProxy(url string) ClientOption {
 	}
 }
 
-// WithProfile sets the TLS client profile.
-func WithProfile(p profiles.ClientProfile) ClientOption {
+// WithProfile sets the TLS client profile for fingerprint impersonation.
+func WithProfile(p TLSProfile) ClientOption {
 	return func(c *clientConfig) {
 		c.profile = p
 	}
@@ -52,13 +47,6 @@ func WithTimeout(seconds int) ClientOption {
 func WithHeaderOrder(order []string) ClientOption {
 	return func(c *clientConfig) {
 		c.headerOrder = order
-	}
-}
-
-// WithCookieJar sets a custom cookie jar.
-func WithCookieJar(jar tls_client.CookieJar) ClientOption {
-	return func(c *clientConfig) {
-		c.cookieJar = jar
 	}
 }
 
@@ -79,8 +67,31 @@ func WithDebug() ClientOption {
 
 // WithProxyPool enables per-request proxy rotation.
 // Each call to Do() will cycle to the next proxy in the pool.
-func WithProxyPool(pool proxypool.ProxyPool) ClientOption {
+func WithProxyPool(pool ProxyPoolProvider) ClientOption {
 	return func(c *clientConfig) {
 		c.proxyPool = pool
+	}
+}
+
+// WithBackend sets a custom backend factory for creating the HTTPDoer.
+// If not set, the default bogdanfinn/tls-client backend is used.
+func WithBackend(factory BackendFactory) ClientOption {
+	return func(c *clientConfig) {
+		c.backend = factory
+	}
+}
+
+// WithStdHTTP uses the standard net/http backend instead of tls-client.
+// No TLS fingerprinting — useful for testing and CGO-free environments.
+func WithStdHTTP() ClientOption {
+	return func(c *clientConfig) {
+		c.backend = newStdBackend
+	}
+}
+
+// WithHTTP3 enables HTTP/3 QUIC support (tls-client backend only).
+func WithHTTP3() ClientOption {
+	return func(c *clientConfig) {
+		c.http3 = true
 	}
 }
