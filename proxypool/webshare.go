@@ -28,14 +28,20 @@ type webshareProxy struct {
 	Password     string `json:"password"`
 }
 
+const webshareDefaultURL = "https://proxy.webshare.io/api/v2/proxy/list/?mode=backbone&page_size=100"
+
 // NewWebshare fetches proxies from the Webshare API and returns a ready-to-use pool.
 func NewWebshare(apiKey string) (*Webshare, error) {
+	return newWebshareFromURL(webshareDefaultURL, apiKey)
+}
+
+func newWebshareFromURL(apiURL, apiKey string) (*Webshare, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("proxy: empty API key")
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("GET", "https://proxy.webshare.io/api/v2/proxy/list/?mode=backbone&page_size=100", nil)
+	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("proxy: build request: %w", err)
 	}

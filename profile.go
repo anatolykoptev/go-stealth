@@ -2,6 +2,8 @@ package stealth
 
 import (
 	"fmt"
+	"math/rand/v2"
+	"runtime"
 	"strings"
 
 	"github.com/bogdanfinn/tls-client/profiles"
@@ -78,6 +80,38 @@ func ExtractChromeVersion(ua string) string {
 		return rest
 	}
 	return rest[:dot]
+}
+
+// PlatformMatchedProfile returns a BrowserProfile whose User-Agent OS matches
+// the actual runtime platform (runtime.GOOS). This prevents fingerprint mismatch
+// where e.g. a "Windows" UA is sent from a Linux server.
+func PlatformMatchedProfile() BrowserProfile {
+	os := runtime.GOOS
+	var candidates []BrowserProfile
+	for _, p := range BuiltinProfiles {
+		if matchesOS(p.UserAgent, os) {
+			candidates = append(candidates, p)
+		}
+	}
+	if len(candidates) == 0 {
+		// Fallback to any profile
+		return BuiltinProfiles[rand.IntN(len(BuiltinProfiles))]
+	}
+	return candidates[rand.IntN(len(candidates))]
+}
+
+// matchesOS checks if a User-Agent string matches the given GOOS value.
+func matchesOS(ua, goos string) bool {
+	switch goos {
+	case "windows":
+		return strings.Contains(ua, "Windows")
+	case "darwin":
+		return strings.Contains(ua, "Macintosh")
+	case "linux":
+		return strings.Contains(ua, "Linux") || strings.Contains(ua, "X11")
+	default:
+		return false
+	}
 }
 
 // extractPlatform returns the OS platform from a User-Agent for sec-ch-ua-platform.

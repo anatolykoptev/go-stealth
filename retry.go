@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -122,6 +123,39 @@ func IsRetryable(err error) bool {
 	}
 
 	return false
+}
+
+// ParseRetryAfter extracts the wait duration from a Retry-After header.
+// Handles both delta-seconds ("120") and HTTP-date ("Thu, 01 Dec 2025 16:00:00 GMT") formats.
+// Returns 0 if the header is missing or unparseable.
+func ParseRetryAfter(resp *http.Response) time.Duration {
+	val := resp.Header.Get("Retry-After")
+	if val == "" {
+		return 0
+	}
+
+	// Try delta-seconds first (most common for 429s)
+	if seconds, err := strconv.Atoi(val); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+
+	// Try HTTP-date (RFC 7231 §7.1.1.1)
+	for _, layout := range []string{
+		time.RFC1123,
+		time.RFC1123Z,
+		time.RFC850,
+		time.ANSIC,
+	} {
+		if t, err := time.Parse(layout, val); err == nil {
+			delta := time.Until(t)
+			if delta > 0 {
+				return delta
+			}
+			return 0
+		}
+	}
+
+	return 0
 }
 
 // IsRetryableStatus returns true for HTTP status codes worth retrying.
