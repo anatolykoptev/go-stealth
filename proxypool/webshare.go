@@ -28,7 +28,10 @@ type webshareProxy struct {
 	Password     string `json:"password"`
 }
 
-const webshareDefaultURL = "https://proxy.webshare.io/api/v2/proxy/list/?mode=backbone&page_size=100"
+const (
+	webshareDefaultURL  = "https://proxy.webshare.io/api/v2/proxy/list/?mode=backbone&page_size=100"
+	webshareDefaultHost = "p.webshare.io" // shared gateway for backbone proxies
+)
 
 // NewWebshare fetches proxies from the Webshare API and returns a ready-to-use pool.
 func NewWebshare(apiKey string) (*Webshare, error) {
@@ -69,7 +72,11 @@ func newWebshareFromURL(apiURL, apiKey string) (*Webshare, error) {
 
 	proxies := make([]string, 0, len(data.Results))
 	for _, p := range data.Results {
-		u := fmt.Sprintf("http://%s:%s@%s:%d", p.Username, p.Password, p.ProxyAddress, p.Port)
+		host := p.ProxyAddress
+		if host == "" {
+			host = webshareDefaultHost
+		}
+		u := fmt.Sprintf("http://%s:%s@%s:%d", p.Username, p.Password, host, p.Port)
 		proxies = append(proxies, u)
 	}
 
