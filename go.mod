@@ -1,6 +1,6 @@
 module github.com/anatolykoptev/go-stealth
 
-go 1.24.1
+go 1.26
 
 require (
 	github.com/bogdanfinn/fhttp v0.6.8
