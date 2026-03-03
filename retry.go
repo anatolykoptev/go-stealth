@@ -118,7 +118,7 @@ func (e *HttpStatusError) Error() string {
 func IsRetryable(err error) bool {
 	var httpErr *HttpStatusError
 	if errors.As(err, &httpErr) {
-		return true
+		return IsRetryableStatus(httpErr.StatusCode)
 	}
 
 	var opErr *net.OpError
