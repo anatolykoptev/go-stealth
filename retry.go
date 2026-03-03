@@ -33,12 +33,22 @@ var DefaultRetryConfig = RetryConfig{
 // RetryDo retries fn up to MaxRetries times with exponential backoff.
 // Retries only on retryable errors; returns immediately on non-retryable or context cancellation.
 func RetryDo[T any](ctx context.Context, rc RetryConfig, fn func() (T, error)) (T, error) {
+	return retryDo(ctx, rc, nil, fn)
+}
+
+// retryDo is the shared retry loop. If resetFn is non-nil, it is called before
+// each retry attempt (not before the first attempt).
+func retryDo[T any](ctx context.Context, rc RetryConfig, resetFn func(), fn func() (T, error)) (T, error) {
 	var zero T
 	var lastErr error
 
 	for attempt := 0; attempt <= rc.MaxRetries; attempt++ {
 		if ctx.Err() != nil {
 			return zero, ctx.Err()
+		}
+
+		if attempt > 0 && resetFn != nil {
+			resetFn()
 		}
 
 		result, err := fn()
