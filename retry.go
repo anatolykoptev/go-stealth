@@ -52,6 +52,10 @@ func RetryDo[T any](ctx context.Context, rc RetryConfig, fn func() (T, error)) (
 		}
 
 		if attempt < rc.MaxRetries {
+			if hook := retryHookFromContext(ctx); hook != nil {
+				hook(ctx, attempt+1, rc.MaxRetries, lastErr)
+			}
+
 			wait := time.Duration(float64(rc.InitialWait) * math.Pow(rc.Multiplier, float64(attempt)))
 			if wait > rc.MaxWait {
 				wait = rc.MaxWait
