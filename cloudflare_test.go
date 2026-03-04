@@ -1,6 +1,8 @@
 package stealth
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -149,5 +151,108 @@ func TestCloudflareDetectMiddleware_Passthrough503NonCF(t *testing.T) {
 	}
 	if resp.StatusCode != 503 {
 		t.Errorf("StatusCode = %d, want 503", resp.StatusCode)
+	}
+}
+
+// --- hard red tests ---
+
+func TestDetectCloudflare_NilHeaders_NoPanic(t *testing.T) {
+	t.Parallel()
+
+	resp := &Response{StatusCode: 503, Body: []byte("challenge-platform"), Headers: nil}
+	cfErr := DetectCloudflare(resp)
+	if cfErr != nil {
+		t.Errorf("expected nil for nil headers, got %v", cfErr)
+	}
+}
+
+func TestDetectCloudflare_403WithChallengeplatform_NotJS(t *testing.T) {
+	t.Parallel()
+
+	// JS challenge requires 503 specifically; 403 + challenge-platform should NOT be ChallengeJS
+	body := `<html><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></html>`
+	resp := &Response{StatusCode: 403, Body: []byte(body), Headers: map[string]string{"server": "cloudflare"}}
+	cfErr := DetectCloudflare(resp)
+	// Should be nil — 403 with challenge-platform has no turnstile/block markers
+	if cfErr != nil {
+		t.Errorf("403 + challenge-platform should not match JS challenge, got %v", cfErr)
+	}
+}
+
+func TestDetectCloudflare_MixedCaseServer(t *testing.T) {
+	t.Parallel()
+
+	for _, server := range []string{"Cloudflare", "CLOUDFLARE", "cloudflare", "Cloudflare-nginx"} {
+		body := `<html>you have been blocked</html>`
+		resp := &Response{StatusCode: 403, Body: []byte(body), Headers: map[string]string{"server": server}}
+		cfErr := DetectCloudflare(resp)
+		if cfErr == nil {
+			t.Errorf("server=%q: expected CloudflareError, got nil", server)
+		}
+	}
+}
+
+func TestDetectCloudflare_CF403NoMarkers_ReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	// Cloudflare 403 but body has no challenge/block markers — normal CF 403
+	resp := &Response{StatusCode: 403, Body: []byte("<html>Access denied</html>"), Headers: map[string]string{"server": "cloudflare"}}
+	cfErr := DetectCloudflare(resp)
+	if cfErr != nil {
+		t.Errorf("CF 403 without markers should return nil, got %v", cfErr)
+	}
+}
+
+func TestDetectCloudflare_RealRayID(t *testing.T) {
+	t.Parallel()
+
+	body := `<html>you have been blocked<span class="cf-error-details"></span></html>`
+	resp := &Response{
+		StatusCode: 403,
+		Body:       []byte(body),
+		Headers:    map[string]string{"server": "cloudflare", "cf-ray": "8f3a2b1c4d5e6-LAX"},
+	}
+	cfErr := DetectCloudflare(resp)
+	if cfErr == nil {
+		t.Fatal("expected CloudflareError")
+	}
+	if cfErr.RayID != "8f3a2b1c4d5e6-LAX" {
+		t.Errorf("RayID = %q, want %q", cfErr.RayID, "8f3a2b1c4d5e6-LAX")
+	}
+}
+
+func TestCloudflareDetectMiddleware_PropagatesBaseError(t *testing.T) {
+	t.Parallel()
+
+	baseErr := fmt.Errorf("connection refused")
+	base := func(req *Request) (*Response, error) {
+		return nil, baseErr
+	}
+
+	handler := CloudflareDetectMiddleware(base)
+	_, err := handler(&Request{Method: "GET", URL: "https://example.com"})
+
+	if !errors.Is(err, baseErr) {
+		t.Errorf("expected base error to propagate, got %v", err)
+	}
+}
+
+func TestCloudflareDetectMiddleware_ErrorsAs_CloudflareError(t *testing.T) {
+	t.Parallel()
+
+	body := `<html><script src="/cdn-cgi/challenge-platform/x.js"></script></html>`
+	base := func(req *Request) (*Response, error) {
+		return &Response{StatusCode: 503, Body: []byte(body), Headers: map[string]string{"server": "cloudflare"}}, nil
+	}
+
+	handler := CloudflareDetectMiddleware(base)
+	_, err := handler(&Request{Method: "GET", URL: "https://example.com"})
+
+	var cfErr *CloudflareError
+	if !errors.As(err, &cfErr) {
+		t.Fatalf("errors.As failed to extract *CloudflareError from %T: %v", err, err)
+	}
+	if cfErr.Type != ChallengeJS {
+		t.Errorf("Type = %q, want %q", cfErr.Type, ChallengeJS)
 	}
 }
