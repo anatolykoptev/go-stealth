@@ -69,3 +69,77 @@ func CloudflareDetectMiddleware(next Handler) Handler {
 		return resp, nil
 	}
 }
+
+// CookieProvider obtains Cloudflare clearance cookies from an external source.
+type CookieProvider interface {
+	// GetCookie returns a cached cf_clearance cookie for the domain.
+	// Returns empty string if no cached cookie is available.
+	GetCookie(domain string) string
+
+	// Solve attempts to solve a Cloudflare challenge and returns the cookie string.
+	// The cookie string should be in "cf_clearance=value" format.
+	Solve(domain string, challenge *CloudflareError) (string, error)
+}
+
+// CloudflareCookieMiddleware returns a middleware that:
+//  1. Injects cached cf_clearance cookies from the provider before each request.
+//  2. On Cloudflare challenge response, calls provider.Solve() to get a cookie and retries once.
+func CloudflareCookieMiddleware(provider CookieProvider) Middleware {
+	return func(next Handler) Handler {
+		return func(req *Request) (*Response, error) {
+			domain := extractDomain(req.URL)
+
+			if cookie := provider.GetCookie(domain); cookie != "" {
+				if req.Headers == nil {
+					req.Headers = make(map[string]string)
+				}
+				req.Headers["cookie"] = appendCookie(req.Headers["cookie"], cookie)
+			}
+
+			resp, err := next(req)
+			if err != nil {
+				return resp, err
+			}
+
+			cfErr := DetectCloudflare(resp)
+			if cfErr == nil {
+				return resp, nil
+			}
+
+			cookie, solveErr := provider.Solve(domain, cfErr)
+			if solveErr != nil {
+				return resp, cfErr
+			}
+			if cookie == "" {
+				return resp, cfErr
+			}
+
+			if req.Headers == nil {
+				req.Headers = make(map[string]string)
+			}
+			req.Headers["cookie"] = appendCookie(req.Headers["cookie"], cookie)
+			return next(req)
+		}
+	}
+}
+
+// extractDomain extracts the hostname from a URL string.
+func extractDomain(rawURL string) string {
+	idx := strings.Index(rawURL, "://")
+	if idx < 0 {
+		return rawURL
+	}
+	host := rawURL[idx+3:]
+	if i := strings.IndexAny(host, ":/"); i >= 0 {
+		host = host[:i]
+	}
+	return host
+}
+
+// appendCookie appends a cookie to an existing cookie header value.
+func appendCookie(existing, newCookie string) string {
+	if existing == "" {
+		return newCookie
+	}
+	return existing + "; " + newCookie
+}
