@@ -297,3 +297,30 @@ func TestCloudflareCookieMiddleware_SolveFailsReturnsError(t *testing.T) {
 		t.Fatal("expected error when solver fails")
 	}
 }
+
+func TestExtractDomain(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct{ input, want string }{
+		{"https://example.com/page", "example.com"},
+		{"http://sub.example.com:8080/path", "sub.example.com"},
+		{"https://example.com", "example.com"},
+		{"example.com", "example.com"},
+	}
+	for _, tt := range tests {
+		if got := extractDomain(tt.input); got != tt.want {
+			t.Errorf("extractDomain(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestAppendCookie(t *testing.T) {
+	t.Parallel()
+
+	if got := appendCookie("", "cf_clearance=abc"); got != "cf_clearance=abc" {
+		t.Errorf("appendCookie empty = %q", got)
+	}
+	if got := appendCookie("session=xyz", "cf_clearance=abc"); got != "session=xyz; cf_clearance=abc" {
+		t.Errorf("appendCookie existing = %q", got)
+	}
+}
