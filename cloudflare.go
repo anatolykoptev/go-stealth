@@ -53,3 +53,19 @@ func DetectCloudflare(resp *Response) *CloudflareError {
 
 	return nil
 }
+
+// CloudflareDetectMiddleware inspects responses for Cloudflare challenges.
+// If a challenge is detected, it returns a *CloudflareError (use errors.As to extract).
+// Non-challenge responses pass through unchanged.
+func CloudflareDetectMiddleware(next Handler) Handler {
+	return func(req *Request) (*Response, error) {
+		resp, err := next(req)
+		if err != nil {
+			return resp, err
+		}
+		if cfErr := DetectCloudflare(resp); cfErr != nil {
+			return resp, cfErr
+		}
+		return resp, nil
+	}
+}
