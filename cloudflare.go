@@ -108,7 +108,7 @@ func CloudflareCookieMiddleware(provider CookieProvider) Middleware {
 
 			cookie, solveErr := provider.Solve(domain, cfErr)
 			if solveErr != nil {
-				return resp, cfErr
+				return resp, fmt.Errorf("%w: solve failed: %w", cfErr, solveErr)
 			}
 			if cookie == "" {
 				return resp, cfErr
@@ -117,7 +117,7 @@ func CloudflareCookieMiddleware(provider CookieProvider) Middleware {
 			if req.Headers == nil {
 				req.Headers = make(map[string]string)
 			}
-			req.Headers["cookie"] = appendCookie(req.Headers["cookie"], cookie)
+			req.Headers["cookie"] = cookie
 			return next(req)
 		}
 	}
