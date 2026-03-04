@@ -13,6 +13,7 @@ type clientConfig struct {
 	debug        bool
 	backend      BackendFactory
 	http3        bool
+	blockRetries int
 }
 
 func defaultConfig() *clientConfig {
@@ -93,5 +94,16 @@ func WithStdHTTP() ClientOption {
 func WithHTTP3() ClientOption {
 	return func(c *clientConfig) {
 		c.http3 = true
+	}
+}
+
+// WithRetryOnBlock enables automatic retry with proxy rotation when the server
+// returns a block status (403, 429). Each retry uses the next proxy from the pool.
+// Requires WithProxyPool. n is the number of extra retries (total attempts = 1 + n).
+func WithRetryOnBlock(n int) ClientOption {
+	return func(c *clientConfig) {
+		if n > 0 {
+			c.blockRetries = n
+		}
 	}
 }
