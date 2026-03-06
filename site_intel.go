@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // knownWAFs is the list of WAF/CDN technology names to detect.
@@ -38,6 +40,7 @@ type SiteIntel struct {
 
 	mu    sync.RWMutex
 	cache map[string]*SiteInfo
+	sf    singleflight.Group
 }
 
 // NewSiteIntel creates a SiteIntel cache backed by ox-browser /analyze.
@@ -50,6 +53,7 @@ func NewSiteIntel(client *OxBrowserClient) *SiteIntel {
 }
 
 // Get returns cached SiteInfo for the domain, fetching via /analyze if needed.
+// Concurrent calls for the same domain are deduplicated via singleflight.
 func (si *SiteIntel) Get(rawURL string) (*SiteInfo, error) {
 	domain := extractDomain(rawURL)
 
@@ -60,33 +64,50 @@ func (si *SiteIntel) Get(rawURL string) (*SiteInfo, error) {
 	}
 	si.mu.RUnlock()
 
-	resp, err := si.client.Analyze(context.Background(), rawURL)
-	if err != nil {
-		slog.Debug("site_intel: analyze failed", slog.String("url", rawURL), slog.Any("error", err))
-		return &SiteInfo{}, err
-	}
+	v, err, _ := si.sf.Do(domain, func() (interface{}, error) {
+		// Double-check cache after winning the singleflight race.
+		si.mu.RLock()
+		if info, ok := si.cache[domain]; ok && time.Since(info.FetchedAt) < si.ttl {
+			si.mu.RUnlock()
+			return info, nil
+		}
+		si.mu.RUnlock()
 
-	info := &SiteInfo{
-		Technologies: resp.Technologies,
-		FetchedAt:    time.Now(),
-	}
-	for _, t := range resp.Technologies {
-		for _, waf := range knownWAFs {
-			if strings.EqualFold(t.Name, waf) {
-				info.WAF = waf
+		resp, err := si.client.Analyze(context.Background(), rawURL)
+		if err != nil {
+			slog.Debug("site_intel: analyze failed", slog.String("url", rawURL), slog.Any("error", err))
+			return &SiteInfo{}, err
+		}
+
+		info := &SiteInfo{
+			Technologies: resp.Technologies,
+			FetchedAt:    time.Now(),
+		}
+		for _, t := range resp.Technologies {
+			for _, waf := range knownWAFs {
+				if strings.EqualFold(t.Name, waf) {
+					info.WAF = waf
+					break
+				}
+			}
+			if info.WAF != "" {
 				break
 			}
 		}
-		if info.WAF != "" {
-			break
+
+		si.mu.Lock()
+		si.cache[domain] = info
+		si.mu.Unlock()
+
+		return info, nil
+	})
+	if err != nil {
+		if info, ok := v.(*SiteInfo); ok {
+			return info, err
 		}
+		return &SiteInfo{}, err
 	}
-
-	si.mu.Lock()
-	si.cache[domain] = info
-	si.mu.Unlock()
-
-	return info, nil
+	return v.(*SiteInfo), nil
 }
 
 // SuggestProfile returns a BrowserProfile optimized for the target site's WAF.
