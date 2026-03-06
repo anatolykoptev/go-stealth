@@ -13,9 +13,13 @@ type DirectConfig struct {
 	Browser          BrowserDoer
 	DDG              bool
 	Startpage        bool
+	Brave            bool
+	Reddit           bool
 	Yandex           YandexConfig
 	DDGLimiter       *rate.Limiter
 	StartpageLimiter *rate.Limiter
+	BraveLimiter     *rate.Limiter
+	RedditLimiter    *rate.Limiter
 }
 
 // SearchDirect queries enabled direct scrapers in parallel.
@@ -58,6 +62,24 @@ func SearchDirect(ctx context.Context, cfg DirectConfig, query, language string)
 		}()
 	}
 
+	if cfg.Brave {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results, err := runBraveDirect(ctx, cfg, query)
+			collect(results, err, "brave")
+		}()
+	}
+
+	if cfg.Reddit {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results, err := runRedditDirect(ctx, cfg, query)
+			collect(results, err, "reddit")
+		}()
+	}
+
 	if cfg.Yandex.APIKey != "" {
 		wg.Add(1)
 		go func() {
@@ -96,4 +118,28 @@ func runStartpageDirect(ctx context.Context, cfg DirectConfig, query, language s
 	}
 	sp := NewStartpage(WithStartpageBrowser(cfg.Browser))
 	return sp.Search(ctx, query, SearchOpts{Language: language})
+}
+
+// runBraveDirect waits on the optional rate limiter then fetches Brave results.
+func runBraveDirect(ctx context.Context, cfg DirectConfig, query string) ([]Result, error) {
+	if cfg.BraveLimiter != nil {
+		if err := cfg.BraveLimiter.Wait(ctx); err != nil {
+			slog.Debug("brave rate limit wait", slog.Any("error", err))
+			return nil, nil //nolint:nilerr // limiter cancelled: skip engine
+		}
+	}
+	b := NewBrave(WithBraveBrowser(cfg.Browser))
+	return b.Search(ctx, query, SearchOpts{})
+}
+
+// runRedditDirect waits on the optional rate limiter then fetches Reddit results.
+func runRedditDirect(ctx context.Context, cfg DirectConfig, query string) ([]Result, error) {
+	if cfg.RedditLimiter != nil {
+		if err := cfg.RedditLimiter.Wait(ctx); err != nil {
+			slog.Debug("reddit rate limit wait", slog.Any("error", err))
+			return nil, nil //nolint:nilerr // limiter cancelled: skip engine
+		}
+	}
+	r := NewReddit(WithRedditBrowser(cfg.Browser))
+	return r.Search(ctx, query, SearchOpts{Limit: 10})
 }
