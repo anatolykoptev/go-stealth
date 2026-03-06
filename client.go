@@ -75,6 +75,10 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 	if cfg.debug {
 		bc.Use(LoggingMiddleware)
 	}
+	if cfg.cookieProvider != nil {
+		bc.Use(CloudflareCookieMiddleware(cfg.cookieProvider))
+		bc.Use(CloudflareDetectMiddleware)
+	}
 	return bc, nil
 }
 
