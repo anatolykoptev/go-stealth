@@ -2,11 +2,12 @@ package imagesearch
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
 const braveImagesURL = "https://search.brave.com/images"
@@ -14,11 +15,16 @@ const braveImagesURL = "https://search.brave.com/images"
 // braveCookie is required for Brave image search to return results.
 const braveCookie = "safesearch=off; useLocation=0; summarizer=0; country=us; ui_lang=en-us"
 
-var braveResultRe = regexp.MustCompile(
-	`\{"url":"[^"]+","title":"[^"]*"[^}]*"properties":\{[^}]+\}[^}]*"thumbnail":\{[^}]+\}\}`,
+// Brave uses JS object notation (unquoted keys), not JSON.
+// properties:{url:"<img>",resized:"...",height:N,width:N,...}
+var bravePropsRe = regexp.MustCompile(
+	`properties:\{url:"([^"]+)",resized:"[^"]*",height:(\d+),width:(\d+)`,
 )
 
-// BraveImages searches Brave via embedded SvelteKit JSON in HTML.
+// thumbnail:{src:"<thumb>"}
+var braveThumbRe = regexp.MustCompile(`thumbnail:\{src:"([^"]+)"`)
+
+// BraveImages searches Brave via embedded JS objects in SSR HTML.
 type BraveImages struct{}
 
 func (b *BraveImages) Name() string { return "brave" }
@@ -47,46 +53,64 @@ func (b *BraveImages) Search(ctx context.Context, doer BrowserDoer, query string
 	return results, nil
 }
 
-type braveResult struct {
-	URL        string           `json:"url"`
-	Title      string           `json:"title"`
-	Properties *braveProperties `json:"properties"`
-	Thumbnail  *braveThumbnail  `json:"thumbnail"`
-}
-
-type braveProperties struct {
-	URL    string `json:"url"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-}
-
-type braveThumbnail struct {
-	Src string `json:"src"`
-}
-
+// parseBraveImageHTML extracts image results from Brave SSR HTML.
+// Brave uses JS object notation: properties:{url:"...",height:N,width:N}
+// Each result block has properties block + nearby thumbnail:{src:"..."}.
 func parseBraveImageHTML(html string) []ImageResult {
-	matches := braveResultRe.FindAllString(html, -1)
+	propLocs := bravePropsRe.FindAllStringSubmatchIndex(html, -1)
+	if len(propLocs) == 0 {
+		return nil
+	}
+
 	var results []ImageResult
-	for _, m := range matches {
-		var br braveResult
-		if err := json.Unmarshal([]byte(m), &br); err != nil {
-			continue
+	for _, loc := range propLocs {
+		imgURL := html[loc[2]:loc[3]]
+		h, _ := strconv.Atoi(html[loc[4]:loc[5]])
+		w, _ := strconv.Atoi(html[loc[6]:loc[7]])
+
+		// Look backwards for source URL: {url:"<source>",title:"<title>"
+		start := loc[0] - 500
+		if start < 0 {
+			start = 0
 		}
-		if br.Properties == nil || br.Properties.URL == "" {
-			continue
+		prefix := html[start:loc[0]]
+
+		source := extractLastQuoted(prefix, `{url:"`)
+		title := extractLastQuoted(prefix, `title:"`)
+
+		// Look forward for thumbnail
+		end := loc[1] + 300
+		if end > len(html) {
+			end = len(html)
 		}
-		r := ImageResult{
-			URL:    br.Properties.URL,
-			Source: br.URL,
-			Title:  br.Title,
-			Width:  br.Properties.Width,
-			Height: br.Properties.Height,
-			Engine: "brave",
+		thumb := ""
+		if tm := braveThumbRe.FindStringSubmatch(html[loc[1]:end]); len(tm) > 1 {
+			thumb = tm[1]
 		}
-		if br.Thumbnail != nil {
-			r.Thumbnail = br.Thumbnail.Src
-		}
-		results = append(results, r)
+
+		results = append(results, ImageResult{
+			URL:       imgURL,
+			Source:    source,
+			Title:     title,
+			Thumbnail: thumb,
+			Width:     w,
+			Height:    h,
+			Engine:    "brave",
+		})
 	}
 	return results
+}
+
+// extractLastQuoted finds the last occurrence of prefix+"<value>" and returns value.
+func extractLastQuoted(s, prefix string) string {
+	idx := strings.LastIndex(s, prefix)
+	if idx < 0 {
+		return ""
+	}
+	rest := s[idx+len(prefix):]
+	end := strings.Index(rest, `"`)
+	if end < 0 {
+		return ""
+	}
+	return rest[:end]
 }
