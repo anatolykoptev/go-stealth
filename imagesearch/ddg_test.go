@@ -1,6 +1,11 @@
 package imagesearch
 
-import "testing"
+import (
+	"context"
+	"io"
+	"strings"
+	"testing"
+)
 
 func TestParseDDGImageJSON(t *testing.T) {
 	body := `{"results":[{"image":"https://img.com/a.jpg","thumbnail":"https://th.com/a.jpg","url":"https://page.com/a","title":"Cat photo","width":800,"height":600},{"image":"https://img.com/b.jpg","thumbnail":"https://th.com/b.jpg","url":"https://page.com/b","title":"Dog photo","width":1024,"height":768}]}`
@@ -36,5 +41,44 @@ func TestParseDDGImageJSON_filterEmptyImage(t *testing.T) {
 	}
 	if results[0].URL != "https://real.jpg" {
 		t.Errorf("url = %q", results[0].URL)
+	}
+}
+
+type ddgHeaderCapture struct {
+	vqdHeaders map[string]string
+	imgHeaders map[string]string
+	callCount  int
+}
+
+func (d *ddgHeaderCapture) Do(method, rawURL string, headers map[string]string, body io.Reader) ([]byte, map[string]string, int, error) {
+	d.callCount++
+	if d.callCount == 1 {
+		d.vqdHeaders = copyMap(headers)
+		return []byte(`<script>vqd="4-123456"</script>`), nil, 200, nil
+	}
+	d.imgHeaders = copyMap(headers)
+	return []byte(`{"results":[]}`), nil, 200, nil
+}
+
+func copyMap(m map[string]string) map[string]string {
+	c := make(map[string]string, len(m))
+	for k, v := range m {
+		c[k] = v
+	}
+	return c
+}
+
+func TestDdgImages_sendsCookies(t *testing.T) {
+	cap := &ddgHeaderCapture{}
+	d := &DdgImages{}
+	_, _ = d.Search(context.Background(), cap, "test", 10)
+
+	if cap.imgHeaders["cookie"] == "" {
+		t.Error("cookie header missing on image request")
+	}
+	for _, key := range []string{"ah", "l"} {
+		if !strings.Contains(cap.imgHeaders["cookie"], key+"=") {
+			t.Errorf("missing cookie key %q in %q", key, cap.imgHeaders["cookie"])
+		}
 	}
 }
