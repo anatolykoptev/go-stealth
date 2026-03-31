@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
-
-	stealth "github.com/anatolykoptev/go-stealth"
 )
 
 const braveImagesURL = "https://search.brave.com/images"
@@ -31,7 +29,7 @@ func (b *BraveImages) Search(ctx context.Context, doer BrowserDoer, query string
 	}
 
 	u := braveImagesURL + "?q=" + url.QueryEscape(query) + "&source=web"
-	headers := stealth.ChromeHeaders()
+	headers := searchHeaders()
 	headers["cookie"] = braveCookie
 
 	data, _, status, err := doer.Do(http.MethodGet, u, headers, nil)
