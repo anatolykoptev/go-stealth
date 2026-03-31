@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -58,6 +59,8 @@ type bingMAttr struct {
 	Turl string `json:"turl"`
 	Purl string `json:"purl"`
 	T    string `json:"t"`
+	Mw   string `json:"mw"`
+	Mh   string `json:"mh"`
 }
 
 func parseBingHTML(html string) []ImageResult {
@@ -73,11 +76,15 @@ func parseBingHTML(html string) []ImageResult {
 		if attr.Murl == "" {
 			continue
 		}
+		w, _ := strconv.Atoi(attr.Mw)
+		h, _ := strconv.Atoi(attr.Mh)
 		results = append(results, ImageResult{
 			URL:       attr.Murl,
 			Thumbnail: attr.Turl,
 			Source:    attr.Purl,
 			Title:     attr.T,
+			Width:     w,
+			Height:    h,
 			Engine:    "bing",
 		})
 	}
