@@ -23,6 +23,23 @@ func (f *fakeEngine) Search(_ context.Context, _ BrowserDoer, _ string, _ int) (
 	return f.results, f.err
 }
 
+// doerAwareEngine returns different results depending on which doer is used.
+type doerAwareEngine struct {
+	name            string
+	primaryResults  []ImageResult
+	primaryErr      error
+	fallbackResults []ImageResult
+	fallbackDoer    BrowserDoer
+}
+
+func (e *doerAwareEngine) Name() string { return e.name }
+func (e *doerAwareEngine) Search(_ context.Context, doer BrowserDoer, _ string, _ int) ([]ImageResult, error) {
+	if doer == e.fallbackDoer {
+		return e.fallbackResults, nil
+	}
+	return e.primaryResults, e.primaryErr
+}
+
 func TestMultiSearch_mergesAndFuses(t *testing.T) {
 	ms := &MultiSearch{
 		Engines: []ImageEngine{
@@ -76,6 +93,49 @@ func TestMultiSearch_engineErrorIsNonFatal(t *testing.T) {
 			&fakeEngine{name: "fail", err: context.DeadlineExceeded},
 		},
 		Doer: &fakeDoer{},
+	}
+	results := ms.Search(context.Background(), "test", 10)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+}
+
+func TestMultiSearch_fallbackOnError(t *testing.T) {
+	fb := &fakeDoer{}
+	ms := &MultiSearch{
+		Engines: []ImageEngine{
+			&doerAwareEngine{
+				name:            "flaky",
+				primaryErr:      context.DeadlineExceeded,
+				fallbackResults: []ImageResult{{URL: "https://fallback.jpg"}},
+				fallbackDoer:    fb,
+			},
+		},
+		Doer:         &fakeDoer{},
+		FallbackDoer: fb,
+	}
+	results := ms.Search(context.Background(), "test", 10)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+	if results[0].URL != "https://fallback.jpg" {
+		t.Errorf("url = %q, want fallback.jpg", results[0].URL)
+	}
+}
+
+func TestMultiSearch_fallbackOnEmptyResults(t *testing.T) {
+	fb := &fakeDoer{}
+	ms := &MultiSearch{
+		Engines: []ImageEngine{
+			&doerAwareEngine{
+				name:            "empty",
+				primaryResults:  nil, // 0 results from primary
+				fallbackResults: []ImageResult{{URL: "https://fallback.jpg"}},
+				fallbackDoer:    fb,
+			},
+		},
+		Doer:         &fakeDoer{},
+		FallbackDoer: fb,
 	}
 	results := ms.Search(context.Background(), "test", 10)
 	if len(results) != 1 {
