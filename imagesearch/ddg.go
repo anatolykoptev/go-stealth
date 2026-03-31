@@ -15,6 +15,10 @@ const (
 	ddgImagesAPI  = "https://duckduckgo.com/i.js"
 )
 
+// ddgCookie provides consent cookies that prevent rate-limiting.
+// SearXNG reference: searx/engines/duckduckgo.py
+const ddgCookie = "ah=wt-wt; l=wt-wt; p=-1; ad=1"
+
 // DdgImages searches DuckDuckGo Images via vqd token + /i.js endpoint.
 type DdgImages struct{}
 
@@ -29,6 +33,7 @@ func (d *DdgImages) Search(ctx context.Context, doer BrowserDoer, query string, 
 	tokenURL := ddgImagesHome + "?q=" + url.QueryEscape(query) + "&iax=images&ia=images"
 	headers := searchHeaders()
 	headers["referer"] = ddgImagesHome
+	headers["cookie"] = ddgCookie
 
 	data, _, status, err := doer.Do(http.MethodGet, tokenURL, headers, nil)
 	if err != nil {
@@ -52,6 +57,7 @@ func (d *DdgImages) Search(ctx context.Context, doer BrowserDoer, query string, 
 	imgHeaders["x-requested-with"] = "XMLHttpRequest"
 	imgHeaders["sec-fetch-site"] = "same-origin"
 	imgHeaders["sec-fetch-mode"] = "cors"
+	imgHeaders["cookie"] = ddgCookie
 
 	imgData, _, imgStatus, err := doer.Do(http.MethodGet, imagesURL, imgHeaders, nil)
 	if err != nil {
