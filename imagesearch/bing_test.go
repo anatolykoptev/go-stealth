@@ -48,3 +48,14 @@ func TestParseBingHTML_missingMurl(t *testing.T) {
 		t.Errorf("no murl: got %d", len(got))
 	}
 }
+
+func TestParseBingHTML_extractsDimensions(t *testing.T) {
+	html := `<a m="{&quot;murl&quot;:&quot;https://example.com/photo.jpg&quot;,&quot;turl&quot;:&quot;https://th.bing.com/th1.jpg&quot;,&quot;purl&quot;:&quot;https://example.com/page&quot;,&quot;t&quot;:&quot;Photo&quot;,&quot;mw&quot;:&quot;1920&quot;,&quot;mh&quot;:&quot;1080&quot;}"></a>`
+	results := parseBingHTML(html)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+	if results[0].Width != 1920 || results[0].Height != 1080 {
+		t.Errorf("dims = %dx%d, want 1920x1080", results[0].Width, results[0].Height)
+	}
+}
