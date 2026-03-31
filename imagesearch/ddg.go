@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 
-	stealth "github.com/anatolykoptev/go-stealth"
 	"github.com/anatolykoptev/go-stealth/websearch"
 )
 
@@ -28,7 +27,7 @@ func (d *DdgImages) Search(ctx context.Context, doer BrowserDoer, query string, 
 
 	// Step 1: fetch homepage to get vqd token.
 	tokenURL := ddgImagesHome + "?q=" + url.QueryEscape(query) + "&iax=images&ia=images"
-	headers := stealth.ChromeHeaders()
+	headers := searchHeaders()
 	headers["referer"] = ddgImagesHome
 
 	data, _, status, err := doer.Do(http.MethodGet, tokenURL, headers, nil)
@@ -48,7 +47,7 @@ func (d *DdgImages) Search(ctx context.Context, doer BrowserDoer, query string, 
 	imagesURL := fmt.Sprintf("%s?l=wt-wt&o=json&q=%s&vqd=%s&f=,,,,,&p=1",
 		ddgImagesAPI, url.QueryEscape(query), url.QueryEscape(vqd))
 
-	imgHeaders := stealth.ChromeHeaders()
+	imgHeaders := searchHeaders()
 	imgHeaders["referer"] = ddgImagesHome
 	imgHeaders["x-requested-with"] = "XMLHttpRequest"
 	imgHeaders["sec-fetch-site"] = "same-origin"
