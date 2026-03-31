@@ -1,0 +1,106 @@
+package imagesearch
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+
+	stealth "github.com/anatolykoptev/go-stealth"
+	"github.com/anatolykoptev/go-stealth/websearch"
+)
+
+const (
+	ddgImagesHome = "https://duckduckgo.com/"
+	ddgImagesAPI  = "https://duckduckgo.com/i.js"
+)
+
+// DdgImages searches DuckDuckGo Images via vqd token + /i.js endpoint.
+type DdgImages struct{}
+
+func (d *DdgImages) Name() string { return "ddg" }
+
+func (d *DdgImages) Search(ctx context.Context, doer BrowserDoer, query string, max int) ([]ImageResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Step 1: fetch homepage to get vqd token.
+	tokenURL := ddgImagesHome + "?q=" + url.QueryEscape(query) + "&iax=images&ia=images"
+	headers := stealth.ChromeHeaders()
+	headers["referer"] = ddgImagesHome
+
+	data, _, status, err := doer.Do(http.MethodGet, tokenURL, headers, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ddg vqd request: %w", err)
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("ddg vqd: status %d", status)
+	}
+
+	vqd := websearch.ExtractVQD(string(data))
+	if vqd == "" {
+		return nil, fmt.Errorf("ddg: vqd token not found")
+	}
+
+	// Step 2: fetch image results.
+	imagesURL := fmt.Sprintf("%s?l=wt-wt&o=json&q=%s&vqd=%s&f=,,,,,&p=1",
+		ddgImagesAPI, url.QueryEscape(query), url.QueryEscape(vqd))
+
+	imgHeaders := stealth.ChromeHeaders()
+	imgHeaders["referer"] = ddgImagesHome
+	imgHeaders["x-requested-with"] = "XMLHttpRequest"
+	imgHeaders["sec-fetch-site"] = "same-origin"
+	imgHeaders["sec-fetch-mode"] = "cors"
+
+	imgData, _, imgStatus, err := doer.Do(http.MethodGet, imagesURL, imgHeaders, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ddg images request: %w", err)
+	}
+	if imgStatus != http.StatusOK {
+		return nil, fmt.Errorf("ddg images: status %d", imgStatus)
+	}
+
+	results := parseDDGImageJSON(imgData)
+	if len(results) > max {
+		results = results[:max]
+	}
+	return results, nil
+}
+
+type ddgImageResponse struct {
+	Results []ddgImageResult `json:"results"`
+}
+
+type ddgImageResult struct {
+	Image     string `json:"image"`
+	Thumbnail string `json:"thumbnail"`
+	URL       string `json:"url"`
+	Title     string `json:"title"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+}
+
+func parseDDGImageJSON(data []byte) []ImageResult {
+	var resp ddgImageResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil
+	}
+	var results []ImageResult
+	for _, r := range resp.Results {
+		if r.Image == "" {
+			continue
+		}
+		results = append(results, ImageResult{
+			URL:       r.Image,
+			Thumbnail: r.Thumbnail,
+			Source:    r.URL,
+			Title:     r.Title,
+			Width:     r.Width,
+			Height:    r.Height,
+			Engine:    "ddg",
+		})
+	}
+	return results
+}
