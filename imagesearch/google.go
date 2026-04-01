@@ -23,7 +23,8 @@ func (g *GoogleImages) Search(ctx context.Context, doer BrowserDoer, query strin
 		return nil, err
 	}
 
-	u := fmt.Sprintf("%s?q=%s&tbm=isch&asearch=ischab&async=_fmt:json,p:1,ijn:0",
+	// SearXNG: async param must NOT be url-encoded, asearch=isch (not ischab).
+	u := fmt.Sprintf("%s?q=%s&tbm=isch&asearch=isch&async=_fmt:json,p:1,ijn:0",
 		googleImagesURL, url.QueryEscape(query))
 
 	headers := androidHeaders()
@@ -71,11 +72,15 @@ type googleThumb struct {
 }
 
 // parseGoogleImageJSON parses Google's ischj JSON response.
-// Google prefixes with )]}' to prevent XSSI — strip before parsing.
+// The JSON is embedded in a larger response; find {"ischj": marker first.
+// Reference: SearXNG uses resp.text.find('{"ischj":').
 func parseGoogleImageJSON(data []byte) []ImageResult {
-	if idx := bytes.IndexByte(data, '\n'); idx >= 0 && idx < 10 {
-		data = data[idx+1:]
+	marker := []byte(`{"ischj":`)
+	idx := bytes.Index(data, marker)
+	if idx < 0 {
+		return nil
 	}
+	data = data[idx:]
 
 	var resp googleIschj
 	if err := json.Unmarshal(data, &resp); err != nil {

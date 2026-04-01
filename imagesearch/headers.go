@@ -12,12 +12,12 @@ func searchHeaders() map[string]string {
 	return h
 }
 
-// androidHeaders returns headers that mimic an Android app request.
-// Google returns JSON from /search?tbm=isch when it sees this UA.
-// Reference: SearXNG searx/engines/google_images.py
+// androidHeaders returns headers mimicking the Google Go Android app.
+// This UA triggers Google to return ~50 JSON results instead of 10 HTML.
+// Exact format from SearXNG searx/engines/google_images.py.
 func androidHeaders() map[string]string {
 	return map[string]string{
-		"user-agent":      "NSTN/3.60.1 (Linux; U; Android 14; en-US; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/125.0.0.0 Mobile Safari/537.36",
+		"user-agent":      "NSTN/3.60.474802233.release Dalvik/2.1.0 (Linux; U; Android 12; US) gzip",
 		"accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 		"accept-language": "en-US,en;q=0.9",
 	}
