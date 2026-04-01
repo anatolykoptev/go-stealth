@@ -13,8 +13,11 @@ const googleImagesURL = "https://www.google.com/search"
 
 // GoogleImages searches Google Images via the Android UA JSON endpoint.
 // Google returns JSON (ischj format) when it sees an Android/Dalvik UA.
+// Falls back to PageRenderer (Chrome) if HTTP returns non-200 or 0 results.
 // Reference: SearXNG searx/engines/google_images.py
-type GoogleImages struct{}
+type GoogleImages struct {
+	Renderer PageRenderer // optional Chrome fallback
+}
 
 func (g *GoogleImages) Name() string { return "google" }
 
@@ -30,14 +33,27 @@ func (g *GoogleImages) Search(ctx context.Context, doer BrowserDoer, query strin
 	headers := androidHeaders()
 
 	data, _, status, err := doer.Do(http.MethodGet, u, headers, nil)
-	if err != nil {
-		return nil, fmt.Errorf("google images request: %w", err)
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("google images: status %d", status)
+	if err == nil && status == http.StatusOK {
+		if results := parseGoogleImageJSON(data); len(results) > 0 {
+			if len(results) > max {
+				results = results[:max]
+			}
+			return results, nil
+		}
 	}
 
-	results := parseGoogleImageJSON(data)
+	// Fallback to Chrome render if available.
+	if g.Renderer == nil {
+		if err != nil {
+			return nil, fmt.Errorf("google images request: %w", err)
+		}
+		return nil, fmt.Errorf("google images: status %d, no renderer", status)
+	}
+	renderedHTML, err := g.Renderer.Render(ctx, "https://www.google.com/search?q="+url.QueryEscape(query)+"&udm=2")
+	if err != nil {
+		return nil, fmt.Errorf("google render: %w", err)
+	}
+	results := parseGoogleImageJSON([]byte(renderedHTML))
 	if len(results) > max {
 		results = results[:max]
 	}
