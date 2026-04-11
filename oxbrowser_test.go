@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -79,5 +80,65 @@ func TestOxBrowserClient_SolveError(t *testing.T) {
 	_, err := client.Solve(context.Background(), "https://example.com", "js_challenge")
 	if err == nil {
 		t.Error("expected error for unreachable server")
+	}
+}
+
+func TestNewOxBrowserClientWithProxy_RoutesViaProxy(t *testing.T) {
+	proxied := false
+
+	// Mock proxy server: records that a request passed through it, then forwards
+	// the request to the real target (also a mock) by acting as a tunnel.
+	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "ok",
+			"cookies": map[string]string{"cf_clearance": "proxied-token"},
+		})
+	}))
+	defer targetSrv.Close()
+
+	proxySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxied = true
+		// Forward the request to the real target server.
+		proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, targetSrv.URL+r.URL.Path, r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		proxyReq.Header = r.Header
+		resp, err := http.DefaultClient.Do(proxyReq)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close() //nolint:errcheck
+		w.WriteHeader(resp.StatusCode)
+		_ = http.NewResponseController(w).Flush()
+		buf := make([]byte, 32*1024) //nolint:mnd
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				_, _ = w.Write(buf[:n])
+			}
+			if readErr != nil {
+				break
+			}
+		}
+	}))
+	defer proxySrv.Close()
+
+	proxyURL, _ := url.Parse(proxySrv.URL)
+	proxyFn := http.ProxyURL(proxyURL)
+
+	// Client points at targetSrv but should route through proxySrv.
+	client := NewOxBrowserClientWithProxy(targetSrv.URL, proxyFn)
+	cookies, err := client.Solve(context.Background(), "https://example.com", "js_challenge")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !proxied {
+		t.Error("expected request to route through proxy, but proxy was not hit")
+	}
+	if cookies["cf_clearance"] != "proxied-token" {
+		t.Errorf("unexpected cookies: %v", cookies)
 	}
 }
