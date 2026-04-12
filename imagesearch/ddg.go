@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/anatolykoptev/go-stealth/websearch"
+	"regexp"
 )
 
 const (
@@ -43,7 +42,7 @@ func (d *DdgImages) Search(ctx context.Context, doer BrowserDoer, query string, 
 		return nil, fmt.Errorf("ddg vqd: status %d", status)
 	}
 
-	vqd := websearch.ExtractVQD(string(data))
+	vqd := extractVQD(string(data))
 	if vqd == "" {
 		return nil, fmt.Errorf("ddg: vqd token not found")
 	}
@@ -108,4 +107,21 @@ func parseDDGImageJSON(data []byte) []ImageResult {
 		})
 	}
 	return results
+}
+
+// vqdPatterns matches the DDG vqd token in various formats.
+var vqdPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`vqd='([^']+)'`),
+	regexp.MustCompile(`vqd="([^"]+)"`),
+	regexp.MustCompile(`vqd=([a-zA-Z0-9_-]+)`),
+}
+
+// extractVQD extracts the vqd token from DDG HTML body.
+func extractVQD(body string) string {
+	for _, pat := range vqdPatterns {
+		if m := pat.FindStringSubmatch(body); len(m) > 1 {
+			return m[1]
+		}
+	}
+	return ""
 }
