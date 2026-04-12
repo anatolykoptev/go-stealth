@@ -187,9 +187,10 @@ func TestIsBlockStatus(t *testing.T) {
 	}{
 		{403, true},
 		{429, true},
+		{502, true},
+		{503, true},
 		{200, false},
 		{500, false},
-		{503, false},
 		{404, false},
 	}
 	for _, tt := range tests {
