@@ -53,6 +53,7 @@ func (b *Brave) Search(ctx context.Context, query string, opts SearchOpts) ([]Re
 	headers := ChromeHeaders()
 	headers["referer"] = braveReferer
 	headers["accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+	headers["accept-encoding"] = "gzip, deflate" // no brotli — tls-client can't decode Brave's br response
 
 	data, _, status, err := b.browser.Do(http.MethodGet, u, headers, nil)
 	if err != nil {
