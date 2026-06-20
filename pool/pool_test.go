@@ -274,3 +274,34 @@ func TestHealthTracker_RecordFailureBoolUnchanged(t *testing.T) {
 		t.Fatal("after success, single failure should return false again")
 	}
 }
+
+// TestHealthTracker_TripCountRisingEdge verifies TripCount counts deactivation
+// generations (rising-edge transitions), not every threshold-crossing failure:
+// a run of failures while latched is one trip; a success re-arms the next trip.
+func TestHealthTracker_TripCountRisingEdge(t *testing.T) {
+	h := NewHealthTracker(10, 0.8, 5)
+
+	// First trip: 5 consecutive failures.
+	for i := 0; i < 5; i++ {
+		h.RecordFailure()
+	}
+	if h.TripCount() != 1 {
+		t.Fatalf("after first trip: TripCount = %d, want 1", h.TripCount())
+	}
+	// More failures while still latched (consec stays >= max, rate stays high):
+	// must NOT inflate the generation count.
+	for i := 0; i < 5; i++ {
+		h.RecordFailure()
+	}
+	if h.TripCount() != 1 {
+		t.Fatalf("failures while latched inflated TripCount to %d, want 1", h.TripCount())
+	}
+	// Recovery re-arms the latch; the next trip is a new generation.
+	h.RecordSuccess()
+	for i := 0; i < 5; i++ {
+		h.RecordFailure()
+	}
+	if h.TripCount() != 2 {
+		t.Fatalf("after success+re-trip: TripCount = %d, want 2", h.TripCount())
+	}
+}

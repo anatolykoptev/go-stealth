@@ -60,8 +60,11 @@ var DefaultProxyBackoff = BackoffConfig{
 // DefaultNonResponsiveBackoff is the default backoff for items that trip the
 // consecutive-failure threshold (e.g. a transiently-broken upstream endpoint).
 // base 5m, x2, cap 30m, +/-30% jitter: trip1~5m, trip2~10m, trip3~20m, trip4+~30m.
-// The 30m cap mirrors twscrape/Envoy "eventually always retried" behaviour so a
-// recovered endpoint self-heals within one cap window without operator intervention.
+// Jitter is applied AFTER the cap, so a capped cooldown can land anywhere in
+// ~21..39m -- the spread is deliberate (thundering-herd mitigation on simultaneous
+// re-admission). The 30m cap mirrors twscrape/Envoy "eventually always retried"
+// behaviour so a recovered endpoint self-heals within ~one cap window without
+// operator intervention.
 var DefaultNonResponsiveBackoff = BackoffConfig{
 	InitialWait: 5 * time.Minute,
 	MaxWait:     30 * time.Minute,
