@@ -24,6 +24,7 @@ type HealthTracker struct {
 	minRequests         int     // minimum requests before health check kicks in
 	failThreshold       float64 // failure rate threshold for unhealthy
 	maxConsecFailures   int     // auto-disable after N consecutive failures
+	tripCount           int     // number of times this item has tripped the deactivation threshold
 }
 
 // NewHealthTracker creates a HealthTracker with the given thresholds.
@@ -58,11 +59,16 @@ func (h *HealthTracker) RecordFailure() bool {
 	h.consecutiveFailures++
 
 	if h.consecutiveFailures >= h.maxConsecFailures {
+		h.tripCount++
 		return true
 	}
 	if h.totalRequests >= h.minRequests {
 		rate := float64(h.failedRequests) / float64(h.totalRequests)
-		return rate >= h.failThreshold
+		if rate >= h.failThreshold {
+			h.tripCount++
+			return true
+		}
+		return false
 	}
 	return false
 }
@@ -74,6 +80,15 @@ func (h *HealthTracker) Stats() (total, failed, consecFails int) {
 	return h.totalRequests, h.failedRequests, h.consecutiveFailures
 }
 
+// TripCount returns how many times this item has tripped the deactivation
+// threshold (consecutive-failure or failure-rate). Pass it to a backoff
+// config so repeated trips against a flapping upstream grow the cooldown.
+func (h *HealthTracker) TripCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.tripCount
+}
+
 // Reset clears all failure counters.
 func (h *HealthTracker) Reset() {
 	h.mu.Lock()
@@ -81,4 +96,5 @@ func (h *HealthTracker) Reset() {
 	h.consecutiveFailures = 0
 	h.failedRequests = 0
 	h.totalRequests = 0
+	h.tripCount = 0
 }
