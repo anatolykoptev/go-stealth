@@ -79,6 +79,11 @@ func NewLimiter(cfg Config, opts ...LimiterOption) *Limiter {
 // malformed header) are ignored so a key is never collapsed to deny-everything.
 // This is the adaptive hook: a 200/429 response carrying x-rate-limit-limit
 // calls UpdateLimit(endpoint, limit) and the limiter tracks the real budget.
+//
+// The override is sticky: once set it persists (last-known-good budget) and is
+// never reset to the static cap by a subsequent non-positive value. The
+// perKeyCap map has no eviction, so callers must use a BOUNDED key space (e.g. a
+// fixed set of endpoint names), not unbounded per-request keys.
 func (l *Limiter) UpdateLimit(key string, limit int) {
 	if limit <= 0 {
 		return
@@ -100,8 +105,12 @@ func (l *Limiter) capFor(key string) int {
 	return l.config.RequestsPerWindow
 }
 
-// Allow returns true if a request can be made for the given key.
-// Atomically increments the counter when returning true.
+// Allow returns true if a request can be made for the given key, incrementing
+// the counter when it does. The cap is read eventually-consistently: a
+// concurrent UpdateLimit may land between the increment and the cap comparison,
+// so at the exact instant a cap changes the admit decision can be off by one.
+// This is harmless for pacing (caps move only by deliberate header-driven
+// updates) and keeps Allow lock-light on the hot path.
 func (l *Limiter) Allow(key string) bool {
 	now := l.clock()
 
@@ -114,7 +123,9 @@ func (l *Limiter) Allow(key string) bool {
 	return count <= l.capFor(key)
 }
 
-// MarkRateLimited sets the blocked-until time for a key (e.g. from a 429 response).
+// MarkRateLimited sets the blocked-until time for a key (e.g. from a 429
+// response). `until` is compared against the Limiter's clock (see WithClock), so
+// under a non-default clock it must be expressed on that same time base.
 func (l *Limiter) MarkRateLimited(key string, until time.Time) {
 	l.store.SetBlocked(key, until)
 }

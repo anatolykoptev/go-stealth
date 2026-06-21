@@ -86,6 +86,54 @@ func TestKeyedPacer_WaitReturnsWhenReady(t *testing.T) {
 	}
 }
 
+// TestKeyedPacer_JitterSampledOncePerGrant proves the random jitter is sampled
+// exactly once when a request is granted (arming the next-allowed time), not
+// re-rolled on every poll. With a fake clock there is no polling at all: the
+// per-key next-allowed boundary is fixed at grant time, so a request lands
+// exactly when the clock crosses it. We assert that across many grants the
+// realized spacing actually varies (jitter is live) AND never drops below the
+// MinDelay floor (the floor is honoured).
+func TestKeyedPacer_JitterSampledOncePerGrant(t *testing.T) {
+	fc := &fakeClock{now: time.Unix(1_700_000_000, 0)}
+	const (
+		minDelay = 100 * time.Millisecond
+		rndDelay = 400 * time.Millisecond
+	)
+	p := NewKeyedPacer(minDelay, rndDelay, WithPacerClock(fc.Now))
+
+	seen := map[time.Duration]struct{}{}
+	prev := fc.now
+	// Grant the first request, then for each subsequent grant advance the clock
+	// in fine steps until the key is allowed again; the elapsed time IS the
+	// sampled spacing for that grant.
+	if !p.Allow("k") {
+		t.Fatal("first grant must be allowed")
+	}
+	for g := 0; g < 30; g++ {
+		steps := 0
+		for !p.Allow("k") {
+			fc.Advance(10 * time.Millisecond)
+			steps++
+			if steps > 100 {
+				t.Fatal("key never became allowed; next-allowed not armed correctly")
+			}
+		}
+		gap := fc.now.Sub(prev)
+		prev = fc.now
+		if gap < minDelay {
+			t.Fatalf("realized spacing %v dropped below MinDelay floor %v", gap, minDelay)
+		}
+		if gap > minDelay+rndDelay+10*time.Millisecond {
+			t.Fatalf("realized spacing %v exceeded MinDelay+RandomDelay band", gap)
+		}
+		seen[gap] = struct{}{}
+	}
+	// Jitter is live: spacing must take several distinct values, not a constant.
+	if len(seen) < 5 {
+		t.Fatalf("spacing not variable: only %d distinct gaps across 30 grants (jitter not live?)", len(seen))
+	}
+}
+
 // TestKeyedPacer_WaitRespectsContext verifies Wait returns ctx.Err() on cancel.
 func TestKeyedPacer_WaitRespectsContext(t *testing.T) {
 	p := NewKeyedPacer(1*time.Hour, 0) // huge delay so Wait would block

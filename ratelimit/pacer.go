@@ -25,8 +25,12 @@ type KeyedPacer struct {
 	randomDelay time.Duration
 	clock       func() time.Time
 
-	mu      sync.Mutex
-	lastReq map[string]time.Time
+	mu sync.Mutex
+	// nextAllowed[key] is the earliest time the key may fire again. It is set
+	// once when a request is granted (sampling the random jitter exactly once),
+	// so realized spacing is uniform over [minDelay, minDelay+randomDelay) rather
+	// than biased toward the low end by re-rolling on every poll.
+	nextAllowed map[string]time.Time
 }
 
 // PacerOption configures a KeyedPacer.
@@ -51,7 +55,7 @@ func NewKeyedPacer(minDelay, randomDelay time.Duration, opts ...PacerOption) *Ke
 		minDelay:    minDelay,
 		randomDelay: randomDelay,
 		clock:       time.Now,
-		lastReq:     make(map[string]time.Time),
+		nextAllowed: make(map[string]time.Time),
 	}
 	for _, o := range opts {
 		o(p)
@@ -64,9 +68,11 @@ func (p *KeyedPacer) disabled() bool {
 	return p.minDelay <= 0 && p.randomDelay <= 0
 }
 
-// Allow reports whether a request for key may proceed now, and records the
-// request time when it returns true. The first request for any key is always
-// allowed (no prior timestamp to space against).
+// Allow reports whether a request for key may proceed now. When it returns true
+// it arms the key's next-allowed time by sampling MinDelay+jitter ONCE, so the
+// jitter is rolled exactly once per granted request (faithful spacing
+// distribution), not re-rolled on every poll. The first request for any key is
+// always allowed (no prior grant to space against).
 func (p *KeyedPacer) Allow(key string) bool {
 	if p.disabled() {
 		return true
@@ -76,16 +82,15 @@ func (p *KeyedPacer) Allow(key string) bool {
 	defer p.mu.Unlock()
 
 	now := p.clock()
-	if last, ok := p.lastReq[key]; ok {
-		delay := p.minDelay
-		if p.randomDelay > 0 {
-			delay += time.Duration(rand.Int64N(int64(p.randomDelay)))
-		}
-		if now.Sub(last) < delay {
-			return false
-		}
+	if next, ok := p.nextAllowed[key]; ok && now.Before(next) {
+		return false
 	}
-	p.lastReq[key] = now
+
+	delay := p.minDelay
+	if p.randomDelay > 0 {
+		delay += time.Duration(rand.Int64N(int64(p.randomDelay)))
+	}
+	p.nextAllowed[key] = now.Add(delay)
 	return true
 }
 
