@@ -49,7 +49,7 @@ func TestRetryOnBlock_SetProxyFailsThenSucceeds(t *testing.T) {
 	backend := &setProxyFailBackend{inner: inner, failCount: 2}
 	pool := &mockPool{proxies: []string{"proxy1", "proxy2", "proxy3"}}
 
-	bc, err := NewClient(
+	bc, err := NewClient(WithoutSSRFGuard(),
 		WithBackend(newSetProxyFailFactory(backend)),
 		WithProxyPool(pool),
 		WithRetryOnBlock(2), // maxAttempts = 3
@@ -85,7 +85,7 @@ func TestRetryOnBlock_SetProxyAllFail(t *testing.T) {
 	backend := &setProxyFailBackend{inner: inner, failCount: 10} // always fail
 	pool := &mockPool{proxies: []string{"proxy1", "proxy2"}}
 
-	bc, err := NewClient(
+	bc, err := NewClient(WithoutSSRFGuard(),
 		WithBackend(newSetProxyFailFactory(backend)),
 		WithProxyPool(pool),
 		WithRetryOnBlock(1), // maxAttempts = 2

@@ -13,7 +13,7 @@ func TestStdBackend_Do(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(WithStdHTTP())
+	client, err := NewClient(WithoutSSRFGuard(), WithStdHTTP())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestStdBackend_Post(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(WithStdHTTP())
+	client, err := NewClient(WithoutSSRFGuard(), WithStdHTTP())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestStdBackend_Cookies(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(WithStdHTTP())
+	client, err := NewClient(WithoutSSRFGuard(), WithStdHTTP())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestStdBackend_NoRedirects(t *testing.T) {
 	defer server.Close()
 
 	// Default: no redirects
-	client, err := NewClient(WithStdHTTP())
+	client, err := NewClient(WithoutSSRFGuard(), WithStdHTTP())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestStdBackend_FollowRedirects(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(WithStdHTTP(), WithFollowRedirects())
+	client, err := NewClient(WithoutSSRFGuard(), WithStdHTTP(), WithFollowRedirects())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestStdBackend_WithMiddleware(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(WithStdHTTP())
+	client, err := NewClient(WithoutSSRFGuard(), WithStdHTTP())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestCustomBackend(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient(WithBackend(customFactory))
+	client, err := NewClient(WithoutSSRFGuard(), WithBackend(customFactory))
 	if err != nil {
 		t.Fatal(err)
 	}

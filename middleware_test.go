@@ -60,7 +60,7 @@ func TestBrowserClient_Use(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestBrowserClient_MiddlewareModifiesHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestRetryMiddleware(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	client2, _ := NewClient()
+	client2, _ := NewClient(WithoutSSRFGuard())
 	client2.Use(RateLimitMiddlewareWithContext(ctx, limiter))
 
 	_, _, _, err = client2.Do("GET", server.URL, nil, nil)
@@ -213,7 +213,7 @@ func TestBrowserClient_DoPost_WithMiddleware(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestClientHintsMiddleware_InjectsHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestClientHintsMiddleware_NoOverride(t *testing.T) {
 		Method: "GET",
 		URL:    "http://example.com",
 		Headers: map[string]string{
-			"user-agent":        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+			"user-agent":         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
 			"sec-ch-ua-platform": `"Custom"`,
 		},
 	})

@@ -11,7 +11,7 @@ import (
 )
 
 func TestNew_DefaultProfile(t *testing.T) {
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestNew_DefaultProfile(t *testing.T) {
 
 func TestNew_WithProfile(t *testing.T) {
 	p := stealth.RandomProfile(stealth.WithBrowser("firefox"), stealth.WithOS("linux"))
-	s, err := New(WithProfile(p))
+	s, err := New(WithProfile(p), WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestSession_Do(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestSession_RequestCount(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestSession_LastUsed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestSession_LastUsed(t *testing.T) {
 }
 
 func TestSession_Age(t *testing.T) {
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestSession_IdleTime(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestSession_ConsistentProfile(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestSession_CustomHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	s, err := New()
+	s, err := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,8 +190,8 @@ func TestSession_CustomHeaders(t *testing.T) {
 }
 
 func TestSession_UniqueIDs(t *testing.T) {
-	s1, _ := New()
-	s2, _ := New()
+	s1, _ := New(WithClientOptions(stealth.WithoutSSRFGuard()))
+	s2, _ := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if s1.ID == s2.ID {
 		t.Fatal("sessions should have unique IDs")
 	}

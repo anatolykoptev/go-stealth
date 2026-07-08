@@ -18,7 +18,7 @@ func TestBrowserClient_Do(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestBrowserClient_DoPost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestBrowserClient_SetCookie(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestBrowserClient_DoCtx_Cancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestBrowserClient_DoCtx_Timeout(t *testing.T) {
 	defer server.Close()
 	defer close(unblock)
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestBrowserClient_DoWithHeaderOrderCtx_Cancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
