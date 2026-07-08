@@ -3,6 +3,8 @@ package stealth
 import (
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -26,8 +28,21 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 		tls_client.WithCookieJar(tls_client.NewCookieJar()),
 		tls_client.WithInsecureSkipVerify(),
 	}
-	if !cfg.FollowRedirects {
+	if cfg.DialControl != nil {
+		// Connect-time SSRF guard on the resolved address. tls-client dials
+		// the DIRECT target through this net.Dialer (connect.go directDialer),
+		// so Control fires per redirect hop on the direct path — rebind-proof.
+		// On a PROXIED client the dialer targets the proxy, so this sees only
+		// the proxy address; RedirectGuard + the pre-request guard cover that.
+		opts = append(opts, tls_client.WithDialer(net.Dialer{Control: adaptControl(cfg.DialControl)}))
+	}
+	switch {
+	case !cfg.FollowRedirects:
 		opts = append(opts, tls_client.WithNotFollowRedirects())
+	case cfg.RedirectGuard != nil:
+		// Per-hop SSRF guard. tls-client's hook is fhttp-typed; the adapter
+		// keeps bogdanfinn/fhttp out of go-stealth's public option signatures.
+		opts = append(opts, tls_client.WithCustomRedirectFunc(adaptRedirect(cfg.RedirectGuard)))
 	}
 	if cfg.ProxyURL != "" {
 		opts = append(opts, tls_client.WithProxyUrl(cfg.ProxyURL))
@@ -38,6 +53,19 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 		return nil, fmt.Errorf("tls-client init: %w", err)
 	}
 	return &tlsClientDoer{client: client}, nil
+}
+
+// adaptRedirect bridges the stdlib-typed RedirectGuard into the fhttp-typed
+// hook tls-client's WithCustomRedirectFunc expects, so bogdanfinn/fhttp never
+// leaks into go-stealth's public API (boundaries H1). fhttp.Request.URL is a
+// stdlib *net/url.URL, so it is reused directly; only the next-hop URL, method,
+// and hop count are what the guard reads.
+func adaptRedirect(guard func(req *http.Request, via []*http.Request) error) func(req *fhttp.Request, via []*fhttp.Request) error {
+	return func(fr *fhttp.Request, fvia []*fhttp.Request) error {
+		sr := &http.Request{Method: fr.Method, URL: fr.URL}
+		via := make([]*http.Request, len(fvia)) // only len(via) matters for the hop cap
+		return guard(sr, via)
+	}
 }
 
 func (t *tlsClientDoer) Do(req *Request) (*Response, error) {

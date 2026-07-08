@@ -1,6 +1,7 @@
 package stealth
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -30,6 +31,12 @@ type BrowserClient struct {
 	handler      Handler // lazy-built from middlewares + base handler
 	debug        bool
 	blockRetries int // extra retry attempts on 403/429 (requires proxyPool)
+
+	// requestURLGuard is the pre-request (tier-3) SSRF check on the initial
+	// target URL, evaluated before the (possibly proxied) fetch. nil = no
+	// pre-request guard (WithoutSSRFGuard). This is the only tier that guards
+	// a proxied fetch's initial target.
+	requestURLGuard func(ctx context.Context, u *url.URL) error
 }
 
 // ProxyPoolProvider returns the next proxy URL for rotation.
@@ -53,6 +60,8 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		TimeoutSeconds:  cfg.timeout,
 		FollowRedirects: cfg.followRedirs,
 		HTTP3:           cfg.http3,
+		DialControl:     cfg.dialControl,
+		RedirectGuard:   cfg.redirectGuard,
 	}
 
 	factory := cfg.backend
@@ -71,11 +80,12 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 	}
 
 	bc := &BrowserClient{
-		doer:         doer,
-		headerOrder:  order,
-		proxyPool:    cfg.proxyPool,
-		debug:        cfg.debug,
-		blockRetries: cfg.blockRetries,
+		doer:            doer,
+		headerOrder:     order,
+		proxyPool:       cfg.proxyPool,
+		debug:           cfg.debug,
+		blockRetries:    cfg.blockRetries,
+		requestURLGuard: cfg.requestURLGuard,
 	}
 	if cfg.debug {
 		bc.Use(LoggingMiddleware)
@@ -121,8 +131,20 @@ func (bc *BrowserClient) buildHandler() Handler {
 }
 
 // baseHandler returns the core Handler that delegates to the backend.
+// It runs the pre-request (tier-3) SSRF guard on the final target URL before
+// handing off to the backend — the only tier that guards a proxied fetch's
+// initial target (tier-1 dial control sees only the proxy there).
 func (bc *BrowserClient) baseHandler(order []string) Handler {
 	return func(req *Request) (*Response, error) {
+		if bc.requestURLGuard != nil {
+			u, err := url.Parse(req.URL)
+			if err != nil {
+				return nil, fmt.Errorf("%w: parse %q: %w", ErrSSRFBlocked, req.URL, err)
+			}
+			if err := bc.requestURLGuard(context.Background(), u); err != nil {
+				return nil, err
+			}
+		}
 		req.HeaderOrder = order
 		return bc.doer.Do(req)
 	}

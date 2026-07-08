@@ -48,7 +48,7 @@ func TestRetryOnBlock_403ThenOK(t *testing.T) {
 	backend := &statusSequenceBackend{statuses: []int{http.StatusForbidden, http.StatusOK}}
 	pool := &mockPool{proxies: []string{"proxy1", "proxy2", "proxy3"}}
 
-	bc, err := NewClient(
+	bc, err := NewClient(WithoutSSRFGuard(),
 		WithBackend(newTestBackendFactory(backend)),
 		WithProxyPool(pool),
 		WithRetryOnBlock(2),
@@ -80,7 +80,7 @@ func TestRetryOnBlock_NoPoolNoRetry(t *testing.T) {
 	t.Parallel()
 	backend := &statusSequenceBackend{statuses: []int{http.StatusForbidden}}
 
-	bc, err := NewClient(
+	bc, err := NewClient(WithoutSSRFGuard(),
 		WithBackend(newTestBackendFactory(backend)),
 		WithRetryOnBlock(2),
 	)
@@ -105,7 +105,7 @@ func TestRetryOnBlock_200NoRetry(t *testing.T) {
 	backend := &statusSequenceBackend{statuses: []int{http.StatusOK}}
 	pool := &mockPool{proxies: []string{"proxy1"}}
 
-	bc, err := NewClient(
+	bc, err := NewClient(WithoutSSRFGuard(),
 		WithBackend(newTestBackendFactory(backend)),
 		WithProxyPool(pool),
 		WithRetryOnBlock(2),
@@ -133,7 +133,7 @@ func TestRetryOnBlock_AllFail(t *testing.T) {
 	}}
 	pool := &mockPool{proxies: []string{"p1", "p2", "p3"}}
 
-	bc, err := NewClient(
+	bc, err := NewClient(WithoutSSRFGuard(),
 		WithBackend(newTestBackendFactory(backend)),
 		WithProxyPool(pool),
 		WithRetryOnBlock(2),
@@ -161,7 +161,7 @@ func TestRetryOnBlock_429(t *testing.T) {
 	}}
 	pool := &mockPool{proxies: []string{"p1", "p2"}}
 
-	bc, err := NewClient(
+	bc, err := NewClient(WithoutSSRFGuard(),
 		WithBackend(newTestBackendFactory(backend)),
 		WithProxyPool(pool),
 		WithRetryOnBlock(1),

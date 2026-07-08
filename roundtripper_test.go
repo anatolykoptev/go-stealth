@@ -16,7 +16,7 @@ func TestRoundTrip_GET(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestRoundTrip_POST(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestRoundTrip_WithMiddleware(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestRoundTrip_WithMiddleware(t *testing.T) {
 }
 
 func TestRoundTrip_ImplementsInterface(t *testing.T) {
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestRoundTrip_ImplementsInterface(t *testing.T) {
 }
 
 func TestStdClient_NotNil(t *testing.T) {
-	client, err := NewClient()
+	client, err := NewClient(WithoutSSRFGuard())
 	if err != nil {
 		t.Fatal(err)
 	}
