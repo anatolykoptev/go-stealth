@@ -28,7 +28,7 @@ func TestWithOxBrowser_Integration(t *testing.T) {
 	}))
 	defer oxSrv.Close()
 
-	client, err := NewClient(
+	client, err := NewClient(WithoutSSRFGuard(),
 		WithStdHTTP(),
 		WithOxBrowser(oxSrv.URL),
 	)
@@ -50,7 +50,7 @@ func TestWithOxBrowser_WithExistingCookieSolver(t *testing.T) {
 
 	// Provide an explicit CookieProvider — ox-browser should not add its own solver.
 	solver := NewOxBrowserSolver(OxBrowserSolverConfig{BaseURL: oxSrv.URL})
-	client, err := NewClient(
+	client, err := NewClient(WithoutSSRFGuard(),
 		WithStdHTTP(),
 		WithCookieSolver(solver),
 		WithOxBrowser(oxSrv.URL),
