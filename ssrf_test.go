@@ -77,6 +77,13 @@ func TestSSRFRedirectGuard_BlocksInternalHop(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected redirect-to-internal to be blocked, got nil error")
 			}
+			// tier-2 tag: a caller redirect-guard rejection (errBlockedTest,
+			// which does NOT wrap ErrSSRFBlocked) must surface as ErrSSRFBlocked
+			// through net/http's *url.Error wrapping so doWithRetry treats it as
+			// non-retryable.
+			if !errors.Is(err, ErrSSRFBlocked) {
+				t.Fatalf("redirect-guard rejection not tagged ErrSSRFBlocked (tier-2): %v", err)
+			}
 			if got := internalHits.Load(); got != 0 {
 				t.Fatalf("internal target hit %d times through the guard; want 0", got)
 			}
@@ -138,6 +145,12 @@ func TestSSRFDialControl_BlocksInternalHop(t *testing.T) {
 			_, _, _, err = guarded.Do(http.MethodGet, redirector.URL, nil, nil)
 			if err == nil {
 				t.Fatalf("expected dial to internal to be refused, got nil error")
+			}
+			// tier-1 tag: a caller dial-control rejection (errBlockedTest) must
+			// surface as ErrSSRFBlocked through the transport's dial-error
+			// wrapping (non-retryable in doWithRetry).
+			if !errors.Is(err, ErrSSRFBlocked) {
+				t.Fatalf("dial-control rejection not tagged ErrSSRFBlocked (tier-1): %v", err)
 			}
 			if got := internalHits.Load(); got != 0 {
 				t.Fatalf("internal target dialed %d times through the guard; want 0", got)
