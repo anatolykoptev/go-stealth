@@ -258,6 +258,36 @@ func TestSSRFBlocked_NotRetriedUnderProxyRotation(t *testing.T) {
 	}
 }
 
+// A CALLER-supplied guard (e.g. go-kit/httputil.CheckURL) returns an error that
+// does NOT wrap this package's ErrSSRFBlocked. WithRequestURLGuard must tag it
+// so doWithRetry still treats the rejection as non-retryable — otherwise a
+// proxied blocked target burns the entire pool before failing. The tag must
+// also preserve the caller's original error in the chain.
+func TestCallerGuardBlock_TaggedAndNotRetried(t *testing.T) {
+	pool := &mockPool{proxies: []string{"p1", "p2", "p3"}}
+	// Foreign guard error — no ErrSSRFBlocked anywhere in its chain, mimicking a
+	// go-kit CheckURL rejection.
+	guard := func(_ context.Context, _ *url.URL) error { return errBlockedTest }
+	client, err := NewClient(WithStdHTTP(), WithProxyPool(pool), WithRetryOnBlock(2),
+		WithoutSSRFGuard(), WithRequestURLGuard(guard))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, _, _, err = client.Do(http.MethodGet, "http://example.com/x", nil, nil)
+	if !errors.Is(err, ErrSSRFBlocked) {
+		t.Fatalf("caller-guard rejection not tagged with ErrSSRFBlocked: %v", err)
+	}
+	if !errors.Is(err, errBlockedTest) {
+		t.Fatalf("caller-guard error chain not preserved (want errBlockedTest): %v", err)
+	}
+	// blockRetries=2 allows up to 3 attempts on an ordinary error; a tagged
+	// guard rejection must stop after the first (one pool.Next()).
+	if got := pool.idx.Load(); got != 1 {
+		t.Fatalf("proxy pool Next() called %d times for a caller-guard-blocked target; want 1 (no retry)", got)
+	}
+}
+
 // --- default-deny unit coverage ---------------------------------------------
 
 func TestDefaultDenyDial(t *testing.T) {
