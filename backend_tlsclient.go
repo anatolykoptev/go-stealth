@@ -57,14 +57,40 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 
 // adaptRedirect bridges the stdlib-typed RedirectGuard into the fhttp-typed
 // hook tls-client's WithCustomRedirectFunc expects, so bogdanfinn/fhttp never
-// leaks into go-stealth's public API (boundaries H1). fhttp.Request.URL is a
-// stdlib *net/url.URL, so it is reused directly; only the next-hop URL, method,
-// and hop count are what the guard reads.
+// leaks into go-stealth's public API (boundaries H1).
+//
+// fhttp's redirect loop (fhttp/client.go) builds its own via chain from the
+// actual prior *fhttp.Request values (each with URL/Method/Header set,
+// appended via `reqs = append(reqs, req)` before the NEXT hop's
+// checkRedirect call) — the same shape and ordering as stdlib
+// net/http.Client's via. adaptHTTPRequest converts each hop faithfully
+// (fhttp.Request.URL is already a stdlib *net/url.URL; fhttp.Header and
+// http.Header share the identical underlying map[string][]string, so the
+// conversion is a zero-copy type conversion) rather than handing the guard a
+// length-only slice of empty requests — WithRedirectGuard is a PUBLIC option,
+// and a caller-supplied guard that reads via[i].URL or via[i].Header (not
+// just len(via)) must not nil/zero-panic.
 func adaptRedirect(guard func(req *http.Request, via []*http.Request) error) func(req *fhttp.Request, via []*fhttp.Request) error {
 	return func(fr *fhttp.Request, fvia []*fhttp.Request) error {
-		sr := &http.Request{Method: fr.Method, URL: fr.URL}
-		via := make([]*http.Request, len(fvia)) // only len(via) matters for the hop cap
-		return guard(sr, via)
+		via := make([]*http.Request, len(fvia))
+		for i, v := range fvia {
+			via[i] = adaptHTTPRequest(v)
+		}
+		return guard(adaptHTTPRequest(fr), via)
+	}
+}
+
+// adaptHTTPRequest converts a fhttp.Request's guard-relevant fields (Method,
+// URL, Header) into a stdlib *http.Request. A nil input yields a non-nil,
+// zero-value *http.Request so a guard can never dereference a nil hop entry.
+func adaptHTTPRequest(fr *fhttp.Request) *http.Request {
+	if fr == nil {
+		return &http.Request{}
+	}
+	return &http.Request{
+		Method: fr.Method,
+		URL:    fr.URL,
+		Header: http.Header(fr.Header),
 	}
 }
 

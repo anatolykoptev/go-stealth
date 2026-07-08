@@ -234,6 +234,30 @@ func TestSSRFPreRequestGuard_ProxiedTargetBlockedBeforeProxyDial(t *testing.T) {
 	}
 }
 
+// --- SSRF block is not retried under proxy rotation --------------------------
+
+// An SSRF-blocked verdict is about the target URL/address, not about which
+// proxy served the request — every retry would re-block identically (the
+// pre-request guard runs before SetProxy on the next attempt too). doWithRetry
+// must return immediately on ErrSSRFBlocked instead of burning the proxy pool.
+func TestSSRFBlocked_NotRetriedUnderProxyRotation(t *testing.T) {
+	pool := &mockPool{proxies: []string{"p1", "p2", "p3"}}
+	client, err := NewClient(WithStdHTTP(), WithProxyPool(pool), WithRetryOnBlock(2))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, _, _, err = client.Do(http.MethodGet, "http://10.8.0.1:8914/internal", nil, nil)
+	if !errors.Is(err, ErrSSRFBlocked) {
+		t.Fatalf("expected ErrSSRFBlocked, got %v", err)
+	}
+	// blockRetries=2 would allow up to 3 attempts (3 pool.Next() calls) on an
+	// ordinary error; an SSRF block must stop after the first.
+	if got := pool.idx.Load(); got != 1 {
+		t.Fatalf("proxy pool Next() called %d times for a blocked target; want 1 (no retry)", got)
+	}
+}
+
 // --- default-deny unit coverage ---------------------------------------------
 
 func TestDefaultDenyDial(t *testing.T) {
@@ -363,6 +387,65 @@ func TestAdaptRedirect(t *testing.T) {
 	}
 	if gotVia != len(fvia) {
 		t.Fatalf("adapter fed hop count %d; want %d", gotVia, len(fvia))
+	}
+}
+
+// TestAdaptRedirect_FaithfulVia proves the via chain the tls backend feeds a
+// PUBLIC WithRedirectGuard is populated hop-by-hop (URL/Method/Header), not a
+// length-only slice of empty requests — a caller-supplied guard that
+// dereferences via[i].URL or via[i].Header must not nil-panic or read
+// garbage.
+func TestAdaptRedirect_FaithfulVia(t *testing.T) {
+	var gotVia []*http.Request
+	guard := func(_ *http.Request, via []*http.Request) error {
+		gotVia = via
+		return nil
+	}
+	adapted := adaptRedirect(guard)
+
+	hop0 := &fhttp.Request{Method: http.MethodGet, URL: mustURL(t, "https://a.example/start"), Header: fhttp.Header{"X-Hop": []string{"0"}}}
+	hop1 := &fhttp.Request{Method: http.MethodGet, URL: mustURL(t, "https://b.example/mid"), Header: fhttp.Header{"X-Hop": []string{"1"}}}
+	fr := &fhttp.Request{Method: http.MethodGet, URL: mustURL(t, "https://c.example/final")}
+	fvia := []*fhttp.Request{hop0, hop1}
+
+	if err := adapted(fr, fvia); err != nil {
+		t.Fatalf("adapted: %v", err)
+	}
+	if len(gotVia) != 2 {
+		t.Fatalf("via length = %d, want 2", len(gotVia))
+	}
+	if gotVia[0] == nil || gotVia[0].URL == nil || gotVia[0].URL.String() != "https://a.example/start" {
+		t.Fatalf("via[0] not faithfully populated: %+v", gotVia[0])
+	}
+	if gotVia[0].Header.Get("X-Hop") != "0" {
+		t.Fatalf("via[0].Header not populated: %v", gotVia[0].Header)
+	}
+	if gotVia[1] == nil || gotVia[1].URL == nil || gotVia[1].URL.String() != "https://b.example/mid" {
+		t.Fatalf("via[1] not faithfully populated: %+v", gotVia[1])
+	}
+	if gotVia[1].Header.Get("X-Hop") != "1" {
+		t.Fatalf("via[1].Header not populated: %v", gotVia[1].Header)
+	}
+}
+
+// TestAdaptRedirect_NilHopSafe proves a nil entry in the fhttp via chain
+// (defensive — fhttp's own loop never produces one, but a public adapter must
+// not assume that) still yields a non-nil *http.Request, so a guard that
+// unconditionally dereferences via[i] cannot nil-panic.
+func TestAdaptRedirect_NilHopSafe(t *testing.T) {
+	guard := func(_ *http.Request, via []*http.Request) error {
+		for i, v := range via {
+			if v == nil {
+				t.Fatalf("via[%d] is nil", i)
+			}
+			_ = v.URL // must not panic even though URL is nil for this hop
+		}
+		return nil
+	}
+	adapted := adaptRedirect(guard)
+	fr := &fhttp.Request{Method: http.MethodGet, URL: mustURL(t, "https://example.com/")}
+	if err := adapted(fr, []*fhttp.Request{nil}); err != nil {
+		t.Fatalf("adapted: %v", err)
 	}
 }
 

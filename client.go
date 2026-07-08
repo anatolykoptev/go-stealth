@@ -2,6 +2,7 @@ package stealth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -224,6 +225,14 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 
 		resp, err := handler(req)
 		if err != nil {
+			// An SSRF-blocked target is a verdict about the URL/address, not
+			// about the proxy in use — every retry would re-block identically
+			// (tier-3's pre-request check runs before SetProxy on the next
+			// attempt too). Return immediately instead of burning the proxy
+			// pool on a request that can never succeed.
+			if errors.Is(err, ErrSSRFBlocked) {
+				return nil, nil, 0, err
+			}
 			// Retry on proxy errors (502, connection refused, etc.) with a new proxy.
 			if attempt < maxAttempts-1 && bc.proxyPool != nil {
 				slog.Debug("request error, retrying with new proxy",

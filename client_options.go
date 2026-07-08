@@ -166,6 +166,16 @@ func WithDialControl(fn func(network, address string) error) ClientOption {
 // custom CheckRedirect replaces net/http's built-in 10-hop limit. Pass
 // go-kit/httputil's SSRFGuards() redirect closure here. A nil fn disables the
 // per-hop guard (the backend then falls back to its built-in redirect cap).
+//
+// On the std backend, req and via are the exact *http.Request values
+// net/http's own redirect loop uses (Body/Cancel/ctx and all). On the tls
+// backend, req and via are adapted from bogdanfinn/fhttp's redirect chain:
+// Method, URL, and Header are populated faithfully hop-by-hop (fhttp builds
+// its own via chain from real prior requests, same shape as net/http's), but
+// Body/GetBody/Cancel/Context and any other *http.Request field are left at
+// their zero value — a guard that needs only len(via)/via[i].URL/via[i].Host
+// (the go-kit SSRFGuards() shape) works unchanged on both backends; a guard
+// reading Body or Context should not assume either backend populates them.
 func WithRedirectGuard(fn func(req *http.Request, via []*http.Request) error) ClientOption {
 	return func(c *clientConfig) {
 		c.redirectGuard = fn
