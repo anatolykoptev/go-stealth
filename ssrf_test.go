@@ -77,6 +77,13 @@ func TestSSRFRedirectGuard_BlocksInternalHop(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected redirect-to-internal to be blocked, got nil error")
 			}
+			// tier-2 tag: a caller redirect-guard rejection (errBlockedTest,
+			// which does NOT wrap ErrSSRFBlocked) must surface as ErrSSRFBlocked
+			// through net/http's *url.Error wrapping so doWithRetry treats it as
+			// non-retryable.
+			if !errors.Is(err, ErrSSRFBlocked) {
+				t.Fatalf("redirect-guard rejection not tagged ErrSSRFBlocked (tier-2): %v", err)
+			}
 			if got := internalHits.Load(); got != 0 {
 				t.Fatalf("internal target hit %d times through the guard; want 0", got)
 			}
@@ -138,6 +145,12 @@ func TestSSRFDialControl_BlocksInternalHop(t *testing.T) {
 			_, _, _, err = guarded.Do(http.MethodGet, redirector.URL, nil, nil)
 			if err == nil {
 				t.Fatalf("expected dial to internal to be refused, got nil error")
+			}
+			// tier-1 tag: a caller dial-control rejection (errBlockedTest) must
+			// surface as ErrSSRFBlocked through the transport's dial-error
+			// wrapping (non-retryable in doWithRetry).
+			if !errors.Is(err, ErrSSRFBlocked) {
+				t.Fatalf("dial-control rejection not tagged ErrSSRFBlocked (tier-1): %v", err)
 			}
 			if got := internalHits.Load(); got != 0 {
 				t.Fatalf("internal target dialed %d times through the guard; want 0", got)
@@ -255,6 +268,36 @@ func TestSSRFBlocked_NotRetriedUnderProxyRotation(t *testing.T) {
 	// ordinary error; an SSRF block must stop after the first.
 	if got := pool.idx.Load(); got != 1 {
 		t.Fatalf("proxy pool Next() called %d times for a blocked target; want 1 (no retry)", got)
+	}
+}
+
+// A CALLER-supplied guard (e.g. go-kit/httputil.CheckURL) returns an error that
+// does NOT wrap this package's ErrSSRFBlocked. WithRequestURLGuard must tag it
+// so doWithRetry still treats the rejection as non-retryable — otherwise a
+// proxied blocked target burns the entire pool before failing. The tag must
+// also preserve the caller's original error in the chain.
+func TestCallerGuardBlock_TaggedAndNotRetried(t *testing.T) {
+	pool := &mockPool{proxies: []string{"p1", "p2", "p3"}}
+	// Foreign guard error — no ErrSSRFBlocked anywhere in its chain, mimicking a
+	// go-kit CheckURL rejection.
+	guard := func(_ context.Context, _ *url.URL) error { return errBlockedTest }
+	client, err := NewClient(WithStdHTTP(), WithProxyPool(pool), WithRetryOnBlock(2),
+		WithoutSSRFGuard(), WithRequestURLGuard(guard))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	_, _, _, err = client.Do(http.MethodGet, "http://example.com/x", nil, nil)
+	if !errors.Is(err, ErrSSRFBlocked) {
+		t.Fatalf("caller-guard rejection not tagged with ErrSSRFBlocked: %v", err)
+	}
+	if !errors.Is(err, errBlockedTest) {
+		t.Fatalf("caller-guard error chain not preserved (want errBlockedTest): %v", err)
+	}
+	// blockRetries=2 allows up to 3 attempts on an ordinary error; a tagged
+	// guard rejection must stop after the first (one pool.Next()).
+	if got := pool.idx.Load(); got != 1 {
+		t.Fatalf("proxy pool Next() called %d times for a caller-guard-blocked target; want 1 (no retry)", got)
 	}
 }
 

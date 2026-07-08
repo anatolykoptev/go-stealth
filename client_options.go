@@ -2,6 +2,7 @@ package stealth
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 )
@@ -156,7 +157,30 @@ func WithOxBrowser(url string) ClientOption {
 // target — pair it with WithRequestURLGuard (tier 3), which does.
 func WithDialControl(fn func(network, address string) error) ClientOption {
 	return func(c *clientConfig) {
-		c.dialControl = fn
+		c.dialControl = tagGuardErr2(fn)
+	}
+}
+
+// tagGuardErr2 / tagGuardErrReq / tagGuardErrURL wrap a caller-supplied guard
+// so any non-nil error it returns also satisfies errors.Is(err, ErrSSRFBlocked)
+// (the caller's error chain is preserved via %w). This is what makes a guard
+// REJECTION non-retryable in doWithRetry, which short-circuits on
+// ErrSSRFBlocked: without it, a consumer wiring go-kit/httputil's CheckURL /
+// SSRFGuards() (whose errors do NOT wrap this package's sentinel) would have a
+// blocked target pointlessly retried against every proxy before failing. The
+// built-in default guards already return ErrSSRFBlocked directly, so only the
+// caller-supplied (With*) path needs tagging. A guard rejection is treated as
+// non-retryable even when it stems from a target-resolve failure — retrying
+// through a different proxy cannot change the target host's DNS answer.
+func tagGuardErr2(fn func(network, address string) error) func(network, address string) error {
+	if fn == nil {
+		return nil
+	}
+	return func(network, address string) error {
+		if err := fn(network, address); err != nil {
+			return fmt.Errorf("%w: %w", ErrSSRFBlocked, err)
+		}
+		return nil
 	}
 }
 
@@ -178,7 +202,22 @@ func WithDialControl(fn func(network, address string) error) ClientOption {
 // reading Body or Context should not assume either backend populates them.
 func WithRedirectGuard(fn func(req *http.Request, via []*http.Request) error) ClientOption {
 	return func(c *clientConfig) {
-		c.redirectGuard = fn
+		c.redirectGuard = tagGuardErrReq(fn)
+	}
+}
+
+// tagGuardErrReq is tagGuardErr2 for the redirect-guard signature. net/http
+// wraps a CheckRedirect error in a *url.Error, whose Unwrap chain errors.Is
+// still traverses to ErrSSRFBlocked.
+func tagGuardErrReq(fn func(req *http.Request, via []*http.Request) error) func(req *http.Request, via []*http.Request) error {
+	if fn == nil {
+		return nil
+	}
+	return func(req *http.Request, via []*http.Request) error {
+		if err := fn(req, via); err != nil {
+			return fmt.Errorf("%w: %w", ErrSSRFBlocked, err)
+		}
+		return nil
 	}
 }
 
@@ -190,7 +229,23 @@ func WithRedirectGuard(fn func(req *http.Request, via []*http.Request) error) Cl
 // disables the pre-request guard.
 func WithRequestURLGuard(fn func(ctx context.Context, u *url.URL) error) ClientOption {
 	return func(c *clientConfig) {
-		c.requestURLGuard = fn
+		c.requestURLGuard = tagGuardErrURL(fn)
+	}
+}
+
+// tagGuardErrURL is tagGuardErr2 for the pre-request-guard signature. This is
+// the load-bearing one for a PROXIED client (the only tier that sees the real
+// target): baseHandler runs it inside the doWithRetry loop, so an untagged
+// go-kit CheckURL rejection would otherwise be retried against every proxy.
+func tagGuardErrURL(fn func(ctx context.Context, u *url.URL) error) func(ctx context.Context, u *url.URL) error {
+	if fn == nil {
+		return nil
+	}
+	return func(ctx context.Context, u *url.URL) error {
+		if err := fn(ctx, u); err != nil {
+			return fmt.Errorf("%w: %w", ErrSSRFBlocked, err)
+		}
+		return nil
 	}
 }
 
