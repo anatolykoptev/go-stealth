@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/anatolykoptev/go-stealth/internal/uri"
 )
 
 // --- mock for CookieProvider ---
@@ -161,8 +163,8 @@ func TestExtractDomain(t *testing.T) {
 		{"example.com", "example.com"},
 	}
 	for _, tt := range tests {
-		if got := extractDomain(tt.input); got != tt.want {
-			t.Errorf("extractDomain(%q) = %q, want %q", tt.input, got, tt.want)
+		if got := uri.ExtractHost(tt.input); got != tt.want {
+			t.Errorf("ExtractHost(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
