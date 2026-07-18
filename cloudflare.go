@@ -3,6 +3,7 @@ package stealth
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // ChallengeType identifies the kind of Cloudflare challenge.
