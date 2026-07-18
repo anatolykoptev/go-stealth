@@ -3,6 +3,8 @@ package stealth
 import (
 	"strings"
 	"testing"
+
+	"github.com/anatolykoptev/go-stealth/internal/uri"
 )
 
 // TestCF_403ChallengePlatform: 403 + "challenge-platform" in body.
@@ -184,7 +186,7 @@ func TestCF_CfMitigated_NotChallenge(t *testing.T) {
 	}
 }
 
-// TestCF_extractDomain_EdgeCases: boundary inputs for extractDomain.
+// TestCF_extractDomain_EdgeCases: boundary inputs for ExtractHost.
 // "example.com" (no scheme), URL with port, malformed "://weird", empty string.
 func TestCF_extractDomain_EdgeCases(t *testing.T) {
 	t.Parallel()
@@ -193,24 +195,24 @@ func TestCF_extractDomain_EdgeCases(t *testing.T) {
 		input string
 		want  string
 	}{
-		// No scheme → no "://" → return rawURL as-is
+		// No scheme → url.Parse returns empty host → return rawURL as-is
 		{"example.com", "example.com"},
-		// Port in URL → strip at ':'
+		// Port in URL → url.Parse strips port
 		{"https://example.com:8080/path/to/page", "example.com"},
-		// Malformed — "://" found but host is "weird"
-		{"://weird", "weird"},
-		// Empty string → no "://" → return ""
+		// Malformed — "://" found but url.Parse returns empty host → return rawURL
+		{"://weird", "://weird"},
+		// Empty string → url.Parse returns empty host → return ""
 		{"", ""},
-		// Path separator after host → strip at '/'
+		// Path separator after host → url.Parse extracts host
 		{"https://host.example.org/path", "host.example.org"},
 		// Port only, no path
 		{"http://api.example.com:9000", "api.example.com"},
 	}
 
 	for _, tt := range tests {
-		got := extractDomain(tt.input)
+		got := uri.ExtractHost(tt.input)
 		if got != tt.want {
-			t.Errorf("extractDomain(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("ExtractHost(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }

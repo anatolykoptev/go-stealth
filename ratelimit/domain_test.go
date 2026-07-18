@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/anatolykoptev/go-stealth/internal/uri"
 )
 
 func TestDomainLimiter_Allow(t *testing.T) {
@@ -180,9 +182,9 @@ func TestExtractDomain(t *testing.T) {
 		{"not-a-url", "not-a-url"},
 	}
 	for _, tt := range tests {
-		got := extractDomain(tt.input)
+		got := uri.ExtractHost(tt.input)
 		if got != tt.want {
-			t.Errorf("extractDomain(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("ExtractHost(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
