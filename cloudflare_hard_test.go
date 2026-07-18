@@ -221,7 +221,7 @@ func TestCF_appendCookie_EdgeCases(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		existing string
+		existing  string
 		newCookie string
 		want      string
 	}{

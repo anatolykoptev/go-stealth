@@ -28,8 +28,8 @@ type Session struct {
 type Option func(*sessionConfig)
 
 type sessionConfig struct {
-	profile     *stealth.BrowserProfile
-	clientOpts  []stealth.ClientOption
+	profile    *stealth.BrowserProfile
+	clientOpts []stealth.ClientOption
 }
 
 // WithProfile sets a fixed browser profile for the session.

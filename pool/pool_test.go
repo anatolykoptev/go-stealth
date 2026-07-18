@@ -12,11 +12,11 @@ type testItem struct {
 	reactivateAt time.Time
 }
 
-func (t *testItem) ID() string                        { return t.id }
-func (t *testItem) IsActive() bool                    { return t.active }
-func (t *testItem) SetActive(v bool)                  { t.active = v }
-func (t *testItem) ReactivateAt() time.Time           { return t.reactivateAt }
-func (t *testItem) SetReactivateAt(t2 time.Time)      { t.reactivateAt = t2 }
+func (t *testItem) ID() string                   { return t.id }
+func (t *testItem) IsActive() bool               { return t.active }
+func (t *testItem) SetActive(v bool)             { t.active = v }
+func (t *testItem) ReactivateAt() time.Time      { return t.reactivateAt }
+func (t *testItem) SetReactivateAt(t2 time.Time) { t.reactivateAt = t2 }
 
 func TestPool_RoundRobin(t *testing.T) {
 	items := []Identity{

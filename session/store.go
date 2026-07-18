@@ -21,10 +21,10 @@ type SessionStore interface {
 
 // sessionData is the serializable form of a Session.
 type sessionData struct {
-	ID           string                `json:"id"`
-	CreatedAt    time.Time             `json:"created_at"`
-	LastUsed     time.Time             `json:"last_used"`
-	RequestCount int64                 `json:"request_count"`
+	ID           string                 `json:"id"`
+	CreatedAt    time.Time              `json:"created_at"`
+	LastUsed     time.Time              `json:"last_used"`
+	RequestCount int64                  `json:"request_count"`
 	Profile      stealth.BrowserProfile `json:"profile"`
 }
 
