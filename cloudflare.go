@@ -2,7 +2,7 @@ package stealth
 
 import (
 	"fmt"
-	"strings"
+	"net/url"
 )
 
 // ChallengeType identifies the kind of Cloudflare challenge.
@@ -140,15 +140,14 @@ func CloudflareCookieMiddleware(provider CookieProvider) Middleware {
 
 // extractDomain extracts the hostname from a URL string.
 func extractDomain(rawURL string) string {
-	idx := strings.Index(rawURL, "://")
-	if idx < 0 {
+	u, err := url.Parse(rawURL)
+	if err != nil {
 		return rawURL
 	}
-	host := rawURL[idx+3:]
-	if i := strings.IndexAny(host, ":/"); i >= 0 {
-		host = host[:i]
+	if host := u.Hostname(); host != "" {
+		return host
 	}
-	return host
+	return rawURL
 }
 
 // appendCookie appends a cookie to an existing cookie header value.
