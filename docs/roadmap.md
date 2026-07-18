@@ -78,6 +78,44 @@ All interfaces enable Redis/etcd backing without adding dependencies to go-steal
 
 ---
 
+## v2.0.0: Secure-by-Default TLS Verification
+
+*Breaking change: TLS certificate verification is now enabled by default. The tls-client backend no longer unconditionally calls `WithInsecureSkipVerify()`.*
+
+### Breaking change
+
+**SECURITY: TLS certificate verification is now enabled by default.** The tls-client backend no longer unconditionally calls `WithInsecureSkipVerify()`. Consumers connecting to servers with self-signed or invalid certificates must add `stealth.WithInsecureSkipVerify()` explicitly.
+
+### New option
+
+- **`WithInsecureSkipVerify()`** — opt-in option that disables TLS certificate verification. Emits a `slog.Warn` at configuration time. Use only for local testing (`httptest.NewTLSServer`) or explicit MITM proxy inspection. Never use in production against public endpoints.
+
+### WithBackend() escape hatch
+
+Consumers needing custom TLS configuration (private PKI, custom CA bundles) should use `WithBackend()` with a custom `BackendFactory` that configures `tls.Config.RootCAs`. Custom-factory consumers are responsible for their own TLS security.
+
+### Migration guide
+
+| | Before (v1.x) | After (v2.0.0) |
+|---|---|---|
+| `stealth.NewClient()` | TLS verification **disabled** (insecure) | TLS verification **enabled** (secure) |
+| Restore old behavior | — | `stealth.NewClient(stealth.WithInsecureSkipVerify())` |
+
+**Before:**
+```go
+client := stealth.NewClient() // TLS verification disabled (insecure)
+```
+
+**After:**
+```go
+client := stealth.NewClient() // TLS verification enabled (secure)
+
+// To restore old behavior:
+client := stealth.NewClient(stealth.WithInsecureSkipVerify())
+```
+
+---
+
 ## Architecture
 
 ```
