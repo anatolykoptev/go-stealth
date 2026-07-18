@@ -3,6 +3,7 @@ package stealth
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 )
@@ -11,19 +12,20 @@ import (
 type ClientOption func(*clientConfig)
 
 type clientConfig struct {
-	proxyURL       string
-	proxyPool      ProxyPoolProvider
-	profile        TLSProfile
-	timeout        int
-	headerOrder    []string
-	followRedirs   bool
-	debug          bool
-	backend        BackendFactory
-	http3          bool
-	blockRetries   int
-	cookieProvider CookieProvider
-	oxBrowserURL   string
-	buildErrors    []error // deferred errors from option constructors
+	proxyURL           string
+	proxyPool          ProxyPoolProvider
+	profile            TLSProfile
+	timeout            int
+	headerOrder        []string
+	followRedirs       bool
+	debug              bool
+	backend            BackendFactory
+	http3              bool
+	insecureSkipVerify bool
+	blockRetries       int
+	cookieProvider     CookieProvider
+	oxBrowserURL       string
+	buildErrors        []error // deferred errors from option constructors
 
 	// SSRF guards. Populated by defaultConfig() with the stdlib default-deny
 	// closures so a zero-option client is fail-closed BY CONSTRUCTION. Each is
@@ -115,6 +117,17 @@ func WithStdHTTP() ClientOption {
 func WithHTTP3() ClientOption {
 	return func(c *clientConfig) {
 		c.http3 = true
+	}
+}
+
+// WithInsecureSkipVerify disables TLS certificate verification.
+// WARNING: this makes connections vulnerable to man-in-the-middle attacks.
+// Use only for local testing (httptest.NewTLSServer) or explicit MITM proxy
+// inspection. Never use in production against public endpoints.
+func WithInsecureSkipVerify() ClientOption {
+	return func(c *clientConfig) {
+		c.insecureSkipVerify = true
+		slog.Warn("TLS certificate verification DISABLED via WithInsecureSkipVerify(). Connections are vulnerable to MITM attacks. Use only for self-signed certs in development.")
 	}
 }
 
