@@ -1,7 +1,7 @@
 # go-stealth
 
 [![Go 1.26+](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 Generic anti-ban toolkit for Go — TLS fingerprinting, proxy rotation, rate limiting, middleware, session management, and a generic pool with health tracking.
 
@@ -118,4 +118,4 @@ acc, err := pool.Next(func(a *Account) bool { return a.IsReady() })
 
 ## License
 
-MIT
+Apache 2.0

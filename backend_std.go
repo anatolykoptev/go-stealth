@@ -88,7 +88,9 @@ func (s *stdDoer) Do(req *Request) (*Response, error) {
 	for k, v := range resp.Header {
 		lk := strings.ToLower(k)
 		if lk == "set-cookie" {
-			respHeaders["set-cookie"] = strings.Join(v, "; ")
+			// Join with newline — "; " is the cookie-attribute separator, not
+			// a multi-header delimiter (see RoundTrip restore logic).
+			respHeaders["set-cookie"] = strings.Join(v, "\n")
 		} else if len(v) > 0 {
 			respHeaders[lk] = v[0]
 		}

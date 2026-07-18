@@ -397,6 +397,13 @@ func TestNewWebshareWithConfig_BackCompatOldTest(t *testing.T) {
 	}
 }
 
+func TestWebshare_NextEmptyPool(t *testing.T) {
+	pool := &Webshare{}
+	if got := pool.Next(); got != "" {
+		t.Fatalf("empty pool Next() = %q, want \"\"", got)
+	}
+}
+
 func TestValidateAndDedup_Deduplication(t *testing.T) {
 	result, err := validateAndDedup([]string{"US", "GB", "US", "DE", "GB"})
 	if err != nil {

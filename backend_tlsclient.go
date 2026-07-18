@@ -124,7 +124,9 @@ func (t *tlsClientDoer) Do(req *Request) (*Response, error) {
 	respHeaders := make(map[string]string, len(resp.Header))
 	for k, v := range resp.Header {
 		if strings.ToLower(k) == "set-cookie" {
-			respHeaders["set-cookie"] = strings.Join(v, "; ")
+			// Join with newline — "; " is the cookie-attribute separator, not
+			// a multi-header delimiter (see RoundTrip restore logic).
+			respHeaders["set-cookie"] = strings.Join(v, "\n")
 		} else if len(v) > 0 {
 			respHeaders[strings.ToLower(k)] = v[0]
 		}

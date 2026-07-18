@@ -39,11 +39,13 @@ func (bc *BrowserClient) RoundTrip(req *http.Request) (*http.Response, error) {
 		resp.Header.Set(k, v)
 	}
 
-	// Restore multi-value Set-Cookie if it was joined
-	if cookies, ok := respHeaders["set-cookie"]; ok && strings.Contains(cookies, "; ") {
+	// Restore multi-value Set-Cookie (backends join distinct cookies with "\n")
+	if cookies, ok := respHeaders["set-cookie"]; ok && cookies != "" {
 		resp.Header.Del("Set-Cookie")
-		for _, c := range strings.Split(cookies, "; ") {
-			resp.Header.Add("Set-Cookie", c)
+		for _, c := range strings.Split(cookies, "\n") {
+			if c != "" {
+				resp.Header.Add("Set-Cookie", c)
+			}
 		}
 	}
 
