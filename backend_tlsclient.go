@@ -26,7 +26,9 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 		tls_client.WithTimeoutSeconds(cfg.TimeoutSeconds),
 		tls_client.WithClientProfile(profile),
 		tls_client.WithCookieJar(tls_client.NewCookieJar()),
-		tls_client.WithInsecureSkipVerify(),
+	}
+	if cfg.InsecureSkipVerify {
+		opts = append(opts, tls_client.WithInsecureSkipVerify())
 	}
 	if cfg.DialControl != nil {
 		// Connect-time SSRF guard on the resolved address. tls-client dials
