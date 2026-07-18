@@ -127,3 +127,50 @@ func TestStdClient_NotNil(t *testing.T) {
 		t.Fatal("Transport should be the BrowserClient")
 	}
 }
+
+// TestRoundTrip_MultiSetCookie verifies that multiple Set-Cookie headers
+// are preserved as separate values (not corrupted by joining on "; ",
+// which is the separator between cookie ATTRIBUTES, not between cookies).
+func TestRoundTrip_MultiSetCookie(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc123", Path: "/"})
+		http.SetCookie(w, &http.Cookie{Name: "cf_clearance", Value: "xyz789", Path: "/"})
+		w.WriteHeader(200)
+	}))
+	defer server.Close()
+
+	client, err := NewClient(WithoutSSRFGuard())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stdClient := client.StdClient()
+	resp, err := stdClient.Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	cookies := resp.Header["Set-Cookie"]
+	if len(cookies) != 2 {
+		t.Fatalf("expected 2 Set-Cookie headers, got %d: %v", len(cookies), cookies)
+	}
+
+	// Each cookie should be a complete cookie string, not a fragment
+	foundSession := false
+	foundCfClearance := false
+	for _, c := range cookies {
+		if strings.HasPrefix(c, "session=abc123") {
+			foundSession = true
+		}
+		if strings.HasPrefix(c, "cf_clearance=xyz789") {
+			foundCfClearance = true
+		}
+	}
+	if !foundSession {
+		t.Errorf("missing session cookie, got: %v", cookies)
+	}
+	if !foundCfClearance {
+		t.Errorf("missing cf_clearance cookie, got: %v", cookies)
+	}
+}
