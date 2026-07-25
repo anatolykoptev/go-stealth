@@ -2,6 +2,7 @@ package stealth
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -181,5 +182,87 @@ func TestBuiltinProfiles_AllHaveMetadata(t *testing.T) {
 		if p.UserAgent == "" {
 			t.Errorf("profile %d has empty UserAgent", i)
 		}
+	}
+}
+
+// profileMajor extracts the numeric major from a TLSProfile constant of the
+// form "chrome_<N>" / "firefox_<N>". Returns "" for profiles without a single
+// numeric major (safari uses "safari_16_0" etc. — not covered by this check).
+func profileMajor(p TLSProfile) string {
+	s := string(p)
+	idx := strings.IndexByte(s, '_')
+	if idx == -1 {
+		return ""
+	}
+	rest := s[idx+1:]
+	// keep only the leading numeric run (chrome_146 -> 146; chrome_131_PSK -> 131)
+	var b strings.Builder
+	for _, r := range rest {
+		if r < '0' || r > '9' {
+			break
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// TestBuiltinProfiles_ChromeUAMatchesTLSProfile is the whole-table invariant:
+// for every Chrome (and Edge, which rides a Chrome TLS profile) entry, the
+// Chrome major encoded in the User-Agent MUST equal the major encoded in the
+// TLSProfile constant. A mismatch (UA says 146, JA3 says 131) is an active
+// bot signal — the whole point of this package.
+func TestBuiltinProfiles_ChromeUAMatchesTLSProfile(t *testing.T) {
+	for i, p := range BuiltinProfiles {
+		if p.Browser != "chrome" && p.Browser != "edge" {
+			continue
+		}
+		uaMajor := ExtractChromeVersion(p.UserAgent)
+		tlsMajor := profileMajor(p.TLSProfile)
+		if tlsMajor == "" {
+			t.Errorf("profile %d (%s): could not parse major from TLSProfile %q", i, p.Browser, p.TLSProfile)
+			continue
+		}
+		if uaMajor != tlsMajor {
+			t.Errorf("profile %d (%s/%s): UA major %q != TLSProfile major %q (UA=%s)",
+				i, p.Browser, p.OS, uaMajor, tlsMajor, p.UserAgent)
+		}
+	}
+}
+
+// TestClientHintsHeaders_ChromeBrandConsistency asserts that for a Chrome UA,
+// sec-ch-ua carries THREE brands including "Google Chrome", and the Chromium
+// brand version equals the UA's Chrome major. The old two-brand implementation
+// (which omitted "Google Chrome") must fail this test.
+func TestClientHintsHeaders_ChromeBrandConsistency(t *testing.T) {
+	tests := []struct {
+		name string
+		ua   string
+		maj  string
+	}{
+		{"chrome146", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36", "146"},
+		{"chrome144", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36", "144"},
+		{"chrome131", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36", "131"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := ClientHintsHeaders(tt.ua)
+			if h == nil {
+				t.Fatal("expected hints for Chrome UA")
+			}
+			chUa := h["sec-ch-ua"]
+			// Must include the "Google Chrome" brand — the old impl omitted it.
+			if !strings.Contains(chUa, `"Google Chrome";v="`+tt.maj+`"`) {
+				t.Errorf("sec-ch-ua missing Google Chrome brand v=%q: %s", tt.maj, chUa)
+			}
+			// Chromium brand version must equal the UA major.
+			wantChromium := `"Chromium";v="` + tt.maj + `"`
+			if !strings.Contains(chUa, wantChromium) {
+				t.Errorf("sec-ch-ua missing/incorrect Chromium brand: want %s in %s", wantChromium, chUa)
+			}
+			// Must carry a GREASE brand (a "Not*Brand" entry).
+			if !strings.Contains(chUa, `"Not`) || !strings.Contains(chUa, `Brand"`) {
+				t.Errorf("sec-ch-ua missing GREASE (Not*Brand) token: %s", chUa)
+			}
+		})
 	}
 }

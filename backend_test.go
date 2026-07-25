@@ -206,6 +206,7 @@ func TestTLSProfileConstants(t *testing.T) {
 	// Verify all profile constants map to valid bogdanfinn profiles
 	profiles := []TLSProfile{
 		ProfileChrome131, ProfileChrome133,
+		ProfileChrome144, ProfileChrome146,
 		ProfileFirefox133,
 		ProfileSafari16, ProfileSafariIOS18, ProfileSafariIOS17,
 	}
@@ -213,6 +214,30 @@ func TestTLSProfileConstants(t *testing.T) {
 		mapped := mapTLSProfile(p)
 		if mapped.GetClientHelloStr() == "" {
 			t.Errorf("profile %s mapped to empty client hello", p)
+		}
+	}
+}
+
+// TestTLSProfile_NewChromeMapsToCorrectBogdanfinnProfile verifies the new
+// Chrome 144/146 constants resolve to the matching bogdanfinn profile THROUGH
+// the existing mapTLSProfile (not a re-implemented map), by comparing the
+// resolved ClientHello version string.
+func TestTLSProfile_NewChromeMapsToCorrectBogdanfinnProfile(t *testing.T) {
+	tests := []struct {
+		goStealthProfile TLSProfile
+		wantVersion      string
+	}{
+		{ProfileChrome144, "144"},
+		{ProfileChrome146, "146"},
+	}
+	for _, tt := range tests {
+		mapped := mapTLSProfile(tt.goStealthProfile)
+		got := mapped.GetClientHelloStr()
+		// bogdanfinn encodes the version in the ClientHello "Version" field,
+		// surfaced via GetClientHelloStr as "Chrome/<version>".
+		if !strings.Contains(got, "Chrome") || !strings.Contains(got, tt.wantVersion) {
+			t.Errorf("mapTLSProfile(%q) = %q, want a Chrome profile with version %q",
+				tt.goStealthProfile, got, tt.wantVersion)
 		}
 	}
 }

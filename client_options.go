@@ -38,7 +38,7 @@ type clientConfig struct {
 
 func defaultConfig() *clientConfig {
 	return &clientConfig{
-		profile:         ProfileChrome131,
+		profile:         ProfileChrome146,
 		timeout:         20,
 		dialControl:     defaultDenyDial,
 		redirectGuard:   defaultDenyRedirect,

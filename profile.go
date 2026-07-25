@@ -29,6 +29,14 @@ var BuiltinProfiles = []BrowserProfile{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
 		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "windows",
 	},
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "windows",
+	},
 	// Chrome — macOS
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -37,6 +45,14 @@ var BuiltinProfiles = []BrowserProfile{
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
 		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "macos",
 	},
 	// Chrome — Linux
 	{
@@ -47,10 +63,22 @@ var BuiltinProfiles = []BrowserProfile{
 		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
 		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "linux",
 	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "linux",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "linux",
+	},
 	// Chrome — Android
 	{
 		UserAgent:  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
 		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "android", Mobile: true,
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36",
+		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "android", Mobile: true,
 	},
 
 	// Safari — macOS
@@ -179,6 +207,12 @@ func PlatformMatchedProfile() BrowserProfile {
 
 // ClientHintsHeaders returns sec-ch-ua-* headers for Chromium-based UAs.
 // Returns nil for Safari/Firefox (they don't send Client Hints).
+//
+// The sec-ch-ua brand list is derived from the UA's Chrome major so the
+// client-hint brands agree with the User-Agent (and the TLS profile): a real
+// Chrome sends THREE brands — a GREASE brand, "Chromium";v="<major>", and
+// "Google Chrome";v="<major>". Edge replaces "Google Chrome" with
+// "Microsoft Edge";v="<edge major>".
 func ClientHintsHeaders(ua string) map[string]string {
 	if !strings.Contains(ua, "Chrome/") {
 		return nil
@@ -190,16 +224,20 @@ func ClientHintsHeaders(ua string) map[string]string {
 		mobile = "?1"
 	}
 
-	hints := map[string]string{
-		"sec-ch-ua":          fmt.Sprintf(`"Chromium";v="%s", "Not_A Brand";v="24"`, version),
-		"sec-ch-ua-mobile":   mobile,
-		"sec-ch-ua-platform": fmt.Sprintf(`"%s"`, platform),
-	}
+	const greaseBrand = `"Not_A Brand";v="24"`
 
-	// Edge adds its own brand
+	var secChUa string
 	if strings.Contains(ua, "Edg/") {
 		edgeVersion := extractEdgeVersion(ua)
-		hints["sec-ch-ua"] = fmt.Sprintf(`"Chromium";v="%s", "Microsoft Edge";v="%s", "Not_A Brand";v="24"`, version, edgeVersion)
+		secChUa = fmt.Sprintf(`%s, "Chromium";v="%s", "Microsoft Edge";v="%s"`, greaseBrand, version, edgeVersion)
+	} else {
+		secChUa = fmt.Sprintf(`%s, "Chromium";v="%s", "Google Chrome";v="%s"`, greaseBrand, version, version)
+	}
+
+	hints := map[string]string{
+		"sec-ch-ua":          secChUa,
+		"sec-ch-ua-mobile":   mobile,
+		"sec-ch-ua-platform": fmt.Sprintf(`"%s"`, platform),
 	}
 
 	return hints

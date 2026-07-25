@@ -159,6 +159,8 @@ func (t *tlsClientDoer) GetCookieValue(rawURL, name string) string {
 var profileMap = map[TLSProfile]profiles.ClientProfile{
 	ProfileChrome131:   profiles.Chrome_131,
 	ProfileChrome133:   profiles.Chrome_133,
+	ProfileChrome144:   profiles.Chrome_144,
+	ProfileChrome146:   profiles.Chrome_146,
 	ProfileFirefox133:  profiles.Firefox_133,
 	ProfileSafari16:    profiles.Safari_16_0,
 	ProfileSafariIOS18: profiles.Safari_IOS_18_0,
