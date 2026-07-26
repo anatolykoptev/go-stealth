@@ -1,11 +1,14 @@
 // Command fingerprint-capture downloads a Chrome-for-Testing build matching a
-// given major version, runs it against the peet.ws echo endpoint, and writes the
-// observed fingerprint to testdata/reference_chrome_<major>.json with full
-// provenance.
+// given major version, runs it against the peet.ws and browserleaks echo
+// endpoints, and writes the observed fingerprint to
+// testdata/reference_chrome_<major>.json with full per-metric provenance.
 //
 // This is the reference-capture half of go-stealth's fingerprint oracle. The
 // oracle test (//go:build fingerprint) compares go-stealth's emitted
-// fingerprint against these references.
+// fingerprint against these references. JA4 (and JA4_o / JA3n) are sourced from
+// browserleaks (FoxIO-faithful); JA3, peetprint, HTTP/2 Akamai, header order,
+// and sec-ch-ua are sourced from peet. Each metric records its source service
+// in the reference so a cross-service comparison is detectable later.
 //
 // Usage:
 //
@@ -42,12 +45,13 @@ const versionsJSON = "https://googlechromelabs.github.io/chrome-for-testing/know
 
 func main() {
 	var (
-		major       = flag.String("major", "", "Chrome major version to capture (e.g. 146), required")
-		endpoint    = flag.String("endpoint", fingerprint.Endpoint, "echo endpoint URL")
-		cacheDir    = flag.String("cache-dir", defaultCacheDir(), "browser download cache (under /home/krolik/tmp by default)")
-		testdataDir = flag.String("testdata-dir", "testdata", "where to write the reference JSON")
-		mode        = flag.String("mode", "headless", "capture mode: headless | headful")
-		display     = flag.String("display", "", "X display for headful mode (e.g. :99); requires Xvfb")
+		major                = flag.String("major", "", "Chrome major version to capture (e.g. 146), required")
+		peetEndpoint         = flag.String("peet-endpoint", fingerprint.PeetEndpoint, "peet.ws echo endpoint URL (JA3/peetprint/HTTP2/headers)")
+		browserleaksEndpoint = flag.String("browserleaks-endpoint", fingerprint.BrowserleaksEndpoint, "browserleaks echo endpoint URL (JA4/JA3n/JA4_o)")
+		cacheDir             = flag.String("cache-dir", defaultCacheDir(), "browser download cache (under /home/krolik/tmp by default)")
+		testdataDir          = flag.String("testdata-dir", "testdata", "where to write the reference JSON")
+		mode                 = flag.String("mode", "headless", "capture mode: headless | headful")
+		display              = flag.String("display", "", "X display for headful mode (e.g. :99); requires Xvfb")
 	)
 	flag.Parse()
 	if *major == "" {
@@ -55,7 +59,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := run(*major, *endpoint, *cacheDir, *testdataDir, *mode, *display); err != nil {
+	if err := run(*major, *peetEndpoint, *browserleaksEndpoint, *cacheDir, *testdataDir, *mode, *display); err != nil {
 		fmt.Fprintf(os.Stderr, "fingerprint-capture: %v\n", err)
 		os.Exit(1)
 	}
@@ -68,7 +72,7 @@ func defaultCacheDir() string {
 	return filepath.Join(os.TempDir(), "go-stealth-fingerprint-cache")
 }
 
-func run(major, endpoint, cacheDir, testdataDir, mode, display string) error {
+func run(major, peetEndpoint, browserleaksEndpoint, cacheDir, testdataDir, mode, display string) error {
 	if runtime.GOARCH == "arm64" {
 		return fmt.Errorf(
 			"Chrome-for-Testing has no linux-arm64 build; cannot capture a matching-major reference on aarch64. " +
@@ -83,29 +87,49 @@ func run(major, endpoint, cacheDir, testdataDir, mode, display string) error {
 	}
 	fmt.Fprintf(os.Stderr, "using chrome %s at %s\n", version, binPath)
 
-	body, err := captureWithChrome(binPath, endpoint, mode, display)
+	// Capture from peet: JA3, peetprint, HTTP/2 akamai, header order, sec-ch-ua.
+	fmt.Fprintf(os.Stderr, "capturing from peet (%s)...\n", peetEndpoint)
+	peetBody, err := captureWithChrome(binPath, peetEndpoint, mode, display)
 	if err != nil {
-		return fmt.Errorf("capture: %w", err)
+		return fmt.Errorf("peet capture: %w", err)
+	}
+	peetRaw, err := fingerprint.ParseRaw(peetBody)
+	if err != nil {
+		return fmt.Errorf("parse peet response: %w", err)
+	}
+	peetObs, err := fingerprint.ExtractPeet(peetRaw)
+	if err != nil {
+		return fmt.Errorf("extract peet observed: %w", err)
 	}
 
-	raw, err := fingerprint.ParsePeet(body)
+	// Capture from browserleaks: JA3, JA3n, JA4, JA4_o, HTTP/2 akamai
+	// (FoxIO-faithful JA4 — peet strips the padding extension 0x0015).
+	fmt.Fprintf(os.Stderr, "capturing from browserleaks (%s)...\n", browserleaksEndpoint)
+	blBody, err := captureWithChrome(binPath, browserleaksEndpoint, mode, display)
 	if err != nil {
-		return err
+		return fmt.Errorf("browserleaks capture: %w", err)
 	}
-	obs, err := fingerprint.ExtractObserved(raw)
+	blRaw, err := fingerprint.ParseRaw(blBody)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse browserleaks response: %w", err)
 	}
+	blObs, err := fingerprint.ExtractBrowserleaks(blRaw)
+	if err != nil {
+		return fmt.Errorf("extract browserleaks observed: %w", err)
+	}
+
+	obs := fingerprint.MergeObserved(peetObs, blObs)
 
 	ref := &fingerprint.Reference{
 		Browser:                "Chrome",
 		BrowserVersion:         version,
 		Major:                  major,
 		CaptureTime:            time.Now().UTC(),
-		Endpoint:               endpoint,
+		Endpoint:               browserleaksEndpoint, // primary = JA4 source (FoxIO-faithful)
 		Mode:                   mode,
 		Arch:                   runtime.GOARCH,
 		BrowserSource:          "chrome-for-testing",
+		Sources:                obs.Sources,
 		TLS:                    obs.TLS,
 		HTTP2AkamaiFingerprint: obs.HTTP2AkamaiFingerprint,
 		HeaderOrder:            obs.HeaderOrder,
@@ -274,9 +298,9 @@ func unzipTo(zipPath, dst string) error {
 	return nil
 }
 
-// captureWithChrome runs the chrome binary against the endpoint and returns the
-// raw peet.ws JSON body. --dump-dom makes Chrome issue a real HTTPS GET (with
-// its real TLS stack) and print the response body to stdout.
+// captureWithChrome runs the chrome binary against an echo endpoint and returns
+// the raw JSON body. --dump-dom makes Chrome issue a real HTTPS GET (with its
+// real TLS stack) and print the response body to stdout.
 func captureWithChrome(bin, endpoint, mode, display string) ([]byte, error) {
 	args := []string{
 		"--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage",

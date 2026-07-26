@@ -19,8 +19,9 @@ clean:
 	go clean -cache -testcache
 
 # fingerprint runs the TLS/HTTP2 fingerprint oracle (//go:build fingerprint).
-# It is NOT part of preflight — it hits the network and needs reference files in
-# testdata/ captured by `go run ./cmd/fingerprint-capture -major <major>`.
+# It is NOT part of preflight — it hits the network (peet.ws + browserleaks) and
+# needs reference files in testdata/ captured by
+# `go run ./cmd/fingerprint-capture -major <major>`.
 # A failure means a go-stealth Chrome profile emits a fingerprint that differs
 # from what a real Chrome of the same major emits — a true result, not a test
 # defect. Fix the profile in a separate reviewed change; do not weaken the
