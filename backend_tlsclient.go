@@ -177,6 +177,8 @@ var profileMap = map[TLSProfile]profiles.ClientProfile{
 	ProfileChrome144:   profiles.Chrome_144,
 	ProfileChrome146:   profiles.Chrome_146,
 	ProfileFirefox133:  profiles.Firefox_133,
+	ProfileFirefox148:  profiles.Firefox_148,
+	ProfileBrave146:    profiles.Brave_146,
 	ProfileSafari16:    profiles.Safari_16_0,
 	ProfileSafariIOS18: profiles.Safari_IOS_18_0,
 	ProfileSafariIOS17: profiles.Safari_IOS_17_0,

@@ -164,6 +164,43 @@ var BuiltinProfiles = []BrowserProfile{
 		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
 		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "linux",
 	},
+	// Firefox 148 — Windows
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0",
+		TLSProfile: ProfileFirefox148, Browser: "firefox", OS: "windows",
+	},
+	// Firefox 148 — macOS
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:148.0) Gecko/20100101 Firefox/148.0",
+		TLSProfile: ProfileFirefox148, Browser: "firefox", OS: "macos",
+	},
+	// Firefox 148 — Linux
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
+		TLSProfile: ProfileFirefox148, Browser: "firefox", OS: "linux",
+	},
+
+	// Brave 146 — Windows.
+	// Brave deliberately does NOT identify itself in the User-Agent: it sends
+	// a stock Chromium/Chrome UA on every platform. So a correct entry pairs
+	// brave_146 with a Chrome/146 UA, which looks wrong but is what real Brave
+	// emits. Do NOT "fix" this to a Brave-branded UA — none exists. The
+	// distinguishing signal is the TLS fingerprint (Brave_146 sets
+	// RandomExtensionOrder: true), not the UA.
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		TLSProfile: ProfileBrave146, Browser: "brave", OS: "windows",
+	},
+	// Brave 146 — macOS (Chrome/146 UA, see Windows entry rationale).
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		TLSProfile: ProfileBrave146, Browser: "brave", OS: "macos",
+	},
+	// Brave 146 — Linux (Chrome/146 UA, see Windows entry rationale).
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		TLSProfile: ProfileBrave146, Browser: "brave", OS: "linux",
+	},
 
 	// Edge — Windows (uses Chrome TLS fingerprint — same Chromium engine)
 	{

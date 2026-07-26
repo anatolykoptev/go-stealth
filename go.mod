@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/bogdanfinn/fhttp v0.6.8
-	github.com/bogdanfinn/tls-client v1.14.0
+	github.com/bogdanfinn/tls-client v1.15.1
 	golang.org/x/sync v0.20.0
 )
 
