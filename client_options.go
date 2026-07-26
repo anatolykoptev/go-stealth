@@ -15,6 +15,7 @@ type clientConfig struct {
 	proxyURL           string
 	proxyPool          ProxyPoolProvider
 	profile            TLSProfile
+	identity           *BrowserIdentity
 	timeout            int
 	headerOrder        []string
 	followRedirs       bool
@@ -69,6 +70,28 @@ func WithProxy(url string) ClientOption {
 func WithProfile(p TLSProfile) ClientOption {
 	return func(c *clientConfig) {
 		c.profile = p
+	}
+}
+
+// WithIdentity sets the browser identity — TLS profile and User-Agent (plus
+// Client Hints) — together, so they can never be configured apart and drift.
+// The identity's TLSProfile is installed as the backend's fingerprint, and
+// Identity() returns the supplied identity verbatim. If ClientHints is nil
+// for a Chromium UA, it is derived from the User-Agent via ClientHintsHeaders
+// so the identity the client reports is always complete.
+//
+// WithIdentity and WithProfile may both be passed; WithIdentity wins for the
+// profile (it sets c.profile too) and supplies the UA, which WithProfile
+// alone cannot do. Use WithIdentity when the caller already holds a
+// BrowserProfile from RandomProfile/PlatformMatchedProfile and wants the
+// client's reported identity to match exactly.
+func WithIdentity(id BrowserIdentity) ClientOption {
+	return func(c *clientConfig) {
+		if id.ClientHints == nil {
+			id.ClientHints = ClientHintsHeaders(id.UserAgent)
+		}
+		c.identity = &id
+		c.profile = id.TLSProfile
 	}
 }
 

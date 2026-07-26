@@ -17,6 +17,55 @@ type BrowserProfile struct {
 	Mobile     bool
 }
 
+// BrowserIdentity is the single owner of everything a target observes about
+// this client's browser half: the TLS fingerprint (JA3/JA4), the User-Agent,
+// and the Client Hints (sec-ch-ua-*) derived from that User-Agent. It embeds
+// BrowserProfile as its core so every existing caller of BuiltinProfiles,
+// RandomProfile, PlatformMatchedProfile and session.WithProfile keeps
+// compiling unchanged — promoted fields give id.UserAgent, id.TLSProfile,
+// id.Browser, id.OS, id.Mobile directly, and id.BrowserProfile is reachable
+// when the whole struct is needed.
+//
+// A BrowserClient built with only a TLSProfile (the common case) resolves its
+// Identity() from BuiltinProfiles so the UA and Client Hints agree with the
+// JA3 by contract, not coincidence. WithIdentity sets profile and UA together
+// so they can never drift apart.
+type BrowserIdentity struct {
+	BrowserProfile
+	// ClientHints holds the sec-ch-ua-* headers derived from UserAgent via
+	// ClientHintsHeaders. nil for Safari/Firefox (they send no Client Hints).
+	ClientHints map[string]string
+}
+
+// UserAgentForProfile returns a User-Agent string from BuiltinProfiles whose
+// TLSProfile matches p. It returns the FIRST matching entry (BuiltinProfiles
+// holds per-OS variants sharing one TLS profile; the first is Windows where
+// available). Returns "" when no BuiltinProfiles entry matches p — this is
+// the documented no-entry behaviour, NOT a fallback: callers pairing a UA
+// with an unknown profile must handle the empty string rather than silently
+// presenting a mismatched UA. This is the single lookup the consumer repos
+// use to delete their hardcoded UA literals.
+func UserAgentForProfile(p TLSProfile) string {
+	bp, ok := profileForTLS(p)
+	if !ok {
+		return ""
+	}
+	return bp.UserAgent
+}
+
+// profileForTLS returns the first BuiltinProfiles entry whose TLSProfile
+// matches p, with ok=false when none match. Used by UserAgentForProfile and
+// by Identity() to resolve a full BrowserProfile (Browser/OS/Mobile included)
+// from a bare TLSProfile.
+func profileForTLS(p TLSProfile) (BrowserProfile, bool) {
+	for _, bp := range BuiltinProfiles {
+		if bp.TLSProfile == p {
+			return bp, true
+		}
+	}
+	return BrowserProfile{}, false
+}
+
 // BuiltinProfiles provides browser fingerprint diversity across Chrome, Safari,
 // Firefox, and Edge with per-OS variants.
 var BuiltinProfiles = []BrowserProfile{
