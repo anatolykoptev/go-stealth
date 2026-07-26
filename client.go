@@ -32,6 +32,7 @@ type BrowserClient struct {
 	handler      Handler // lazy-built from middlewares + base handler
 	debug        bool
 	blockRetries int // extra retry attempts on 403/429 (requires proxyPool)
+	identity     BrowserIdentity
 
 	// requestURLGuard is the pre-request (tier-3) SSRF check on the initial
 	// target URL, evaluated before the (possibly proxied) fetch. nil = no
@@ -88,6 +89,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		debug:           cfg.debug,
 		blockRetries:    cfg.blockRetries,
 		requestURLGuard: cfg.requestURLGuard,
+		identity:        resolveIdentity(cfg),
 	}
 	if cfg.debug {
 		bc.Use(LoggingMiddleware)
@@ -116,6 +118,42 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 func (bc *BrowserClient) Use(mw ...Middleware) {
 	bc.middlewares = append(bc.middlewares, mw...)
 	bc.handler = nil // rebuild on next Do()
+}
+
+// resolveIdentity builds the BrowserIdentity a client reports. If WithIdentity
+// was used, the supplied identity (with Client Hints already derived by the
+// option) wins. Otherwise the identity is resolved from the configured
+// TLSProfile via BuiltinProfiles — the first matching entry supplies the
+// User-Agent and metadata, and Client Hints are derived from that UA. For a
+// profile with no BuiltinProfiles entry the UA is "" and Client Hints are nil
+// (UserAgentForProfile's documented no-entry behaviour); the TLSProfile is
+// still carried so Identity().TLSProfile always reflects the backend config.
+func resolveIdentity(cfg *clientConfig) BrowserIdentity {
+	if cfg.identity != nil {
+		return *cfg.identity
+	}
+	bp, _ := profileForTLS(cfg.profile)
+	if bp.TLSProfile == "" {
+		bp.TLSProfile = cfg.profile
+	}
+	return BrowserIdentity{
+		BrowserProfile: bp,
+		ClientHints:    ClientHintsHeaders(bp.UserAgent),
+	}
+}
+
+// Identity returns the BrowserIdentity the client is actually presenting: the
+// TLS profile installed on the backend, the User-Agent paired with it, and the
+// Client Hints derived from that User-Agent. For a client built with only
+// WithProfile (or the bare default), the UA is resolved from BuiltinProfiles
+// so it agrees with the JA3 by contract. For a client built with
+// WithIdentity, the supplied identity is returned verbatim.
+//
+// This is the accessor consumer repos use to obtain the User-Agent that
+// matches the fingerprint they are presenting, instead of hardcoding their
+// own UA literal that can drift from the library's default profile.
+func (bc *BrowserClient) Identity() BrowserIdentity {
+	return bc.identity
 }
 
 // buildHandler constructs the handler chain from middlewares + base handler.
