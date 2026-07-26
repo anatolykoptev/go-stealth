@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.1](https://github.com/anatolykoptev/go-stealth/compare/v1.21.0...v1.21.1) (2026-07-26)
+
+
+### Fixed
+
+* match real Chrome's request-header set and accept header ([#42](https://github.com/anatolykoptev/go-stealth/issues/42)) ([75302aa](https://github.com/anatolykoptev/go-stealth/commit/75302aad1c7bcca86b4395ed33143825be29197c))
+
 ## [1.21.0](https://github.com/anatolykoptev/go-stealth/compare/v1.20.0...v1.21.0) (2026-07-26)
 
 
