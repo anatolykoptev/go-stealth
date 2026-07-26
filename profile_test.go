@@ -207,13 +207,15 @@ func profileMajor(p TLSProfile) string {
 }
 
 // TestBuiltinProfiles_ChromeUAMatchesTLSProfile is the whole-table invariant:
-// for every Chrome (and Edge, which rides a Chrome TLS profile) entry, the
-// Chrome major encoded in the User-Agent MUST equal the major encoded in the
-// TLSProfile constant. A mismatch (UA says 146, JA3 says 131) is an active
-// bot signal — the whole point of this package.
+// for every Chrome (and Edge, which rides a Chrome TLS profile, and Brave,
+// which rides a Chrome UA — Brave deliberately does not identify itself in the
+// UA, so a brave_146 entry pairs a Chrome/146 UA with the Brave_146 TLS
+// profile) entry, the Chrome major encoded in the User-Agent MUST equal the
+// major encoded in the TLSProfile constant. A mismatch (UA says 146, JA3 says
+// 131) is an active bot signal — the whole point of this package.
 func TestBuiltinProfiles_ChromeUAMatchesTLSProfile(t *testing.T) {
 	for i, p := range BuiltinProfiles {
-		if p.Browser != "chrome" && p.Browser != "edge" {
+		if p.Browser != "chrome" && p.Browser != "edge" && p.Browser != "brave" {
 			continue
 		}
 		uaMajor := ExtractChromeVersion(p.UserAgent)
