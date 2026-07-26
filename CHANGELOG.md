@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.0](https://github.com/anatolykoptev/go-stealth/compare/v1.21.2...v1.22.0) (2026-07-26)
+
+
+### Added
+
+* bump tls-client v1.14.0 -&gt; v1.15.1, add Firefox_148 and Brave_146 ([#46](https://github.com/anatolykoptev/go-stealth/issues/46)) ([c2037b5](https://github.com/anatolykoptev/go-stealth/commit/c2037b5855314fc566ddafbb6cd43077ed2d4a64))
+
 ## [1.21.2](https://github.com/anatolykoptev/go-stealth/compare/v1.21.1...v1.21.2) (2026-07-26)
 
 
