@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.0](https://github.com/anatolykoptev/go-stealth/compare/v1.19.1...v1.20.0) (2026-07-26)
+
+
+### Added
+
+* Chrome 144/146 profiles and three-brand sec-ch-ua ([#31](https://github.com/anatolykoptev/go-stealth/issues/31)) ([21dea00](https://github.com/anatolykoptev/go-stealth/commit/21dea0036a18b47e8070456f5cd9afc608bd7992))
+
 ## [1.19.1](https://github.com/anatolykoptev/go-stealth/compare/v1.19.0...v1.19.1) (2026-07-18)
 
 
