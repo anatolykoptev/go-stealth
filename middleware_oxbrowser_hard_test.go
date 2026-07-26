@@ -270,3 +270,48 @@ func TestSmartFetch_ManagedAt200(t *testing.T) {
 		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 }
+
+// TestSmartFetch_403_CfMitigated_Delegates: 403 + cf-mitigated: challenge must
+// be detected and delegated to ox-browser FetchSmart. This is the issue #48
+// evidence turned into a test: a 403 managed challenge returned nil before the
+// fix (100 ms silent pass-through instead of a ~3 s ox-browser solve). No such
+// 403-delegation test existed before.
+func TestSmartFetch_403_CfMitigated_Delegates(t *testing.T) {
+	t.Parallel()
+
+	var fetchSmartCalled bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetchSmartCalled = true
+		_ = json.NewEncoder(w).Encode(FetchSmartResponse{
+			Status: http.StatusOK,
+			Body:   "<html>solved from 403</html>",
+			Method: "solved",
+		})
+	}))
+	defer srv.Close()
+
+	base := func(req *Request) (*Response, error) {
+		return &Response{
+			Body:       []byte("<html><title>Just a moment...</title></html>"),
+			StatusCode: 403,
+			Headers:    map[string]string{"server": "cloudflare", "cf-mitigated": "challenge"},
+		}, nil
+	}
+
+	mw := SmartFetchMiddleware(NewOxBrowserClient(srv.URL))
+	handler := mw(base)
+
+	resp, err := handler(&Request{Method: http.MethodGet, URL: "https://example.com"})
+	if err != nil {
+		t.Fatalf("expected ox-browser to solve 403 challenge, got error: %v", err)
+	}
+	if !fetchSmartCalled {
+		t.Fatal("expected FetchSmart to be invoked on 403 + cf-mitigated, but it was not called")
+	}
+	if string(resp.Body) != "<html>solved from 403</html>" {
+		t.Errorf("body = %q, want solved body from ox-browser", string(resp.Body))
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("StatusCode = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}

@@ -166,16 +166,22 @@ func TestDetectCloudflare_NilHeaders_NoPanic(t *testing.T) {
 	}
 }
 
-func TestDetectCloudflare_403WithChallengeplatform_NotJS(t *testing.T) {
+// TestDetectCloudflare_403WithChallengeplatform_IsJS: 403 + challenge-platform
+// must return ChallengeJS. Cloudflare moved the JS/managed-challenge status from
+// 503 to 403 on 2023-03-01; challenge-platform is a status-independent marker.
+// (Was TestDetectCloudflare_403WithChallengeplatform_NotJS — encoded the 503-only
+// bug as intent; flipped in the issue #48 fix.)
+func TestDetectCloudflare_403WithChallengeplatform_IsJS(t *testing.T) {
 	t.Parallel()
 
-	// JS challenge requires 503 specifically; 403 + challenge-platform should NOT be ChallengeJS
 	body := `<html><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></html>`
 	resp := &Response{StatusCode: 403, Body: []byte(body), Headers: map[string]string{"server": "cloudflare"}}
 	cfErr := DetectCloudflare(resp)
-	// Should be nil — 403 with challenge-platform has no turnstile/block markers
-	if cfErr != nil {
-		t.Errorf("403 + challenge-platform should not match JS challenge, got %v", cfErr)
+	if cfErr == nil {
+		t.Fatal("403 + challenge-platform should return ChallengeJS, got nil")
+	}
+	if cfErr.Type != ChallengeJS {
+		t.Errorf("Type = %q, want %q", cfErr.Type, ChallengeJS)
 	}
 }
 
@@ -251,6 +257,94 @@ func TestCloudflareDetectMiddleware_ErrorsAs_CloudflareError(t *testing.T) {
 	var cfErr *CloudflareError
 	if !errors.As(err, &cfErr) {
 		t.Fatalf("errors.As failed to extract *CloudflareError from %T: %v", err, err)
+	}
+	if cfErr.Type != ChallengeJS {
+		t.Errorf("Type = %q, want %q", cfErr.Type, ChallengeJS)
+	}
+}
+
+// --- issue #48: 403 managed-challenge detection (cf-mitigated, status-independent) ---
+
+// TestDetectCloudflare_403_CfMitigated_ChallengePlatform: the exact issue #48
+// case — 403 + cf-mitigated: challenge + challenge-platform + "Just a moment"
+// title. Impossible to write green before the fix (503-only gate returned nil).
+func TestDetectCloudflare_403_CfMitigated_ChallengePlatform(t *testing.T) {
+	t.Parallel()
+
+	body := `<!DOCTYPE html><html><head><title>Just a moment...</title></head>
+<body><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></body></html>`
+	resp := &Response{
+		StatusCode: 403,
+		Body:       []byte(body),
+		Headers:    map[string]string{"server": "cloudflare", "cf-mitigated": "challenge", "cf-ray": "8abc-LAX"},
+	}
+	cfErr := DetectCloudflare(resp)
+	if cfErr == nil {
+		t.Fatal("403 + cf-mitigated:challenge + challenge-platform must be detected (issue #48), got nil")
+	}
+	if cfErr.Type != ChallengeJS {
+		t.Errorf("Type = %q, want %q", cfErr.Type, ChallengeJS)
+	}
+	if cfErr.StatusCode != 403 {
+		t.Errorf("StatusCode = %d, want 403", cfErr.StatusCode)
+	}
+}
+
+// TestDetectCloudflare_403_CfMitigated_EmptyBody: cf-mitigated: challenge alone
+// suffices per the docs — the header is set on all challenge-page types
+// regardless of body content. Empty body must still be detected.
+func TestDetectCloudflare_403_CfMitigated_EmptyBody(t *testing.T) {
+	t.Parallel()
+
+	resp := &Response{
+		StatusCode: 403,
+		Body:       []byte(""),
+		Headers:    map[string]string{"server": "cloudflare", "cf-mitigated": "challenge"},
+	}
+	cfErr := DetectCloudflare(resp)
+	if cfErr == nil {
+		t.Fatal("403 + cf-mitigated:challenge + empty body must be detected (header alone suffices), got nil")
+	}
+	if cfErr.Type != ChallengeJS {
+		t.Errorf("Type = %q, want %q", cfErr.Type, ChallengeJS)
+	}
+}
+
+// TestDetectCloudflare_403_CfMitigated_BlockMarkers_Win: a 403 carrying both
+// cf-mitigated: challenge AND block markers must classify as a block — block
+// markers take precedence over the header so a WAF block is never sent to a
+// solver.
+func TestDetectCloudflare_403_CfMitigated_BlockMarkers_Win(t *testing.T) {
+	t.Parallel()
+
+	body := `<html><h1>Sorry, you have been blocked</h1><span class="cf-error-details"></span></html>`
+	resp := &Response{
+		StatusCode: 403,
+		Body:       []byte(body),
+		Headers:    map[string]string{"server": "cloudflare", "cf-mitigated": "challenge"},
+	}
+	cfErr := DetectCloudflare(resp)
+	if cfErr == nil {
+		t.Fatal("expected ChallengeBlock, got nil")
+	}
+	if cfErr.Type != ChallengeBlock {
+		t.Errorf("Type = %q, want %q (block markers must win over cf-mitigated)", cfErr.Type, ChallengeBlock)
+	}
+}
+
+// TestDetectCloudflare_503_CfMitigated: the header is also valid on the legacy
+// 503 status. 503 + cf-mitigated: challenge must be detected (not gated out).
+func TestDetectCloudflare_503_CfMitigated(t *testing.T) {
+	t.Parallel()
+
+	resp := &Response{
+		StatusCode: 503,
+		Body:       []byte(""),
+		Headers:    map[string]string{"server": "cloudflare", "cf-mitigated": "challenge"},
+	}
+	cfErr := DetectCloudflare(resp)
+	if cfErr == nil {
+		t.Fatal("503 + cf-mitigated:challenge must be detected (header on legacy status), got nil")
 	}
 	if cfErr.Type != ChallengeJS {
 		t.Errorf("Type = %q, want %q", cfErr.Type, ChallengeJS)

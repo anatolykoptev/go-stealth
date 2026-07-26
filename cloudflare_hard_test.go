@@ -8,8 +8,10 @@ import (
 )
 
 // TestCF_403ChallengePlatform: 403 + "challenge-platform" in body.
-// JS challenge requires 503 specifically — 403 must NOT return ChallengeJS.
-// There is no turnstile/block marker either, so result must be nil.
+// Cloudflare moved the JS/managed-challenge status from 503 to 403 on
+// 2023-03-01; challenge-platform is now a status-independent JS/managed
+// marker. 403 + challenge-platform must return ChallengeJS (was nil before
+// the fix — the 503-only gate was the bug, issue #48).
 func TestCF_403ChallengePlatform(t *testing.T) {
 	t.Parallel()
 
@@ -20,8 +22,11 @@ func TestCF_403ChallengePlatform(t *testing.T) {
 		Headers:    map[string]string{"server": "cloudflare"},
 	}
 	cfErr := DetectCloudflare(resp)
-	if cfErr != nil {
-		t.Errorf("403 + challenge-platform should return nil (JS requires 503), got %v (type=%q)", cfErr, cfErr.Type)
+	if cfErr == nil {
+		t.Fatal("403 + challenge-platform should return ChallengeJS, got nil")
+	}
+	if cfErr.Type != ChallengeJS {
+		t.Errorf("Type = %q, want %q", cfErr.Type, ChallengeJS)
 	}
 }
 
