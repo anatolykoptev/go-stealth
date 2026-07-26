@@ -12,14 +12,29 @@ import (
 	"time"
 )
 
-// DefaultHeaderOrder is a generic Chrome-like header order.
+// DefaultHeaderOrder is the Chrome request-header order, taken from the
+// real-Chrome references in internal/fingerprint/testdata/reference_chrome_*.json
+// (header_order field). Real Chrome sends these 13 headers in this exact order
+// on a top-level GET navigation. referer and cookie are not in the reference
+// (the capture was a clean first request) but are appended so they stay ordered
+// when a caller supplies them; their position is approximate — the references
+// do not record it.
 var DefaultHeaderOrder = []string{
-	"accept",
+	"sec-ch-ua",
+	"sec-ch-ua-mobile",
+	"sec-ch-ua-platform",
 	"accept-language",
+	"upgrade-insecure-requests",
+	"user-agent",
+	"accept",
+	"sec-fetch-site",
+	"sec-fetch-mode",
+	"sec-fetch-user",
+	"sec-fetch-dest",
 	"accept-encoding",
+	"priority",
 	"referer",
 	"cookie",
-	"user-agent",
 }
 
 // BrowserClient wraps an HTTPDoer backend with middleware, proxy rotation,

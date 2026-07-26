@@ -39,15 +39,15 @@ import (
 	"github.com/anatolykoptev/go-stealth/internal/fingerprint"
 )
 
-// chromeHeaders mirrors stealth.ChromeHeaders but with a pinned profile UA
-// instead of a random one, so the oracle is deterministic per profile.
+// chromeHeaders returns stealth.ChromeHeaders with the User-Agent pinned to
+// the profile UA (instead of a random one) so the oracle is deterministic per
+// profile. Delegating to the production function (rather than mirroring it)
+// keeps the oracle gating the actual header set go-stealth emits — a stale
+// mirror would let production drift past the gate.
 func chromeHeaders(ua string) map[string]string {
-	return map[string]string{
-		"accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-		"accept-language": "en-US,en;q=0.9",
-		"accept-encoding": "gzip, deflate, br, zstd",
-		"user-agent":      ua,
-	}
+	h := stealth.ChromeHeaders()
+	h["user-agent"] = ua
+	return h
 }
 
 // TestFingerprintOracle builds a go-stealth client for each unique Chrome TLS

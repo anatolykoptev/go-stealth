@@ -43,11 +43,27 @@ func randomChromeUserAgent() string {
 }
 
 // ChromeHeaders returns common Chrome browser headers with a random Chrome User-Agent.
+//
+// The set and the accept value match the real-Chrome references captured per
+// major in internal/fingerprint/testdata/reference_chrome_*.json (header_order
+// + accept fields). Real Chrome sends 13 request headers on a top-level GET
+// navigation; the sec-ch-ua-* trio is added separately by ClientHintsHeaders
+// (it is profile-version-dependent), so ChromeHeaders emits the remaining 10.
+// The sec-fetch-*, upgrade-insecure-requests, and priority values are the
+// canonical Chrome top-level-navigation values; the references record only
+// these headers' names and order (in header_order), not their values, and the
+// oracle compares only names+order for them.
 func ChromeHeaders() map[string]string {
 	return map[string]string{
-		"accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-		"accept-language": "en-US,en;q=0.9",
-		"accept-encoding": "gzip, deflate, br, zstd",
-		"user-agent":      randomChromeUserAgent(),
+		"accept-language":           "en-US,en;q=0.9",
+		"upgrade-insecure-requests": "1",
+		"user-agent":                randomChromeUserAgent(),
+		"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		"sec-fetch-site":            "none",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-user":            "?1",
+		"sec-fetch-dest":            "document",
+		"accept-encoding":           "gzip, deflate, br, zstd",
+		"priority":                  "u=0, i",
 	}
 }
