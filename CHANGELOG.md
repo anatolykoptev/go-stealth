@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.0](https://github.com/anatolykoptev/go-stealth/compare/v1.20.0...v1.21.0) (2026-07-26)
+
+
+### Added
+
+* give browser identity an owner (BrowserIdentity, WithIdentity, Identity, UserAgentForProfile) ([#37](https://github.com/anatolykoptev/go-stealth/issues/37)) ([8bc3e52](https://github.com/anatolykoptev/go-stealth/commit/8bc3e52b43d31b17044edbc11c1b8a573f54bf01))
+
 ## [1.20.0](https://github.com/anatolykoptev/go-stealth/compare/v1.19.1...v1.20.0) (2026-07-26)
 
 
