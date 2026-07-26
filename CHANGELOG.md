@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.2](https://github.com/anatolykoptev/go-stealth/compare/v1.21.1...v1.21.2) (2026-07-26)
+
+
+### Fixed
+
+* **backend:** strip h3 from Chrome 133 ClientHello to match cold-connection Chrome ([#44](https://github.com/anatolykoptev/go-stealth/issues/44)) ([40f0996](https://github.com/anatolykoptev/go-stealth/commit/40f099639dcf903a830a5d72a24bdd5e0f8ee100))
+
 ## [1.21.1](https://github.com/anatolykoptev/go-stealth/compare/v1.21.0...v1.21.1) (2026-07-26)
 
 
