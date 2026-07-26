@@ -108,6 +108,28 @@ acc, err := pool.Next(func(a *Account) bool { return a.IsReady() })
 | `proxypool` | ProxyPool interface + Static, Webshare, HealthyProxyPool |
 | `ratelimit` | Per-key sliding window + per-domain limiter |
 | `session` | Stateful browsing with persistence |
+| `internal/fingerprint` | Reference types + oracle comparison for the fingerprint measurement |
+| `cmd/fingerprint-capture` | Captures a real Chrome's fingerprint as an oracle reference |
+
+## Fingerprint oracle
+
+`make fingerprint` runs the TLS/HTTP2 fingerprint oracle, which checks that each
+Chrome profile in `BuiltinProfiles` actually emits the fingerprint a real Chrome
+of the same major version emits. It is **not** part of `make preflight` (it hits
+the network and needs reference files); run it explicitly.
+
+A **failure** means a go-stealth Chrome profile's emitted fingerprint differs
+from a real Chrome's — a true result (the profile is stale or wrong), not a test
+defect. Fix the profile in a separate reviewed change; do not weaken the
+comparison to make it green.
+
+References live in `testdata/reference_chrome_<major>.json`, captured by:
+
+```bash
+go run ./cmd/fingerprint-capture -major 146   # amd64 host; no arm64 Chrome-for-Testing build
+```
+
+See `testdata/README.md` for the headless caveat and provenance contract.
 
 ## Used By
 
