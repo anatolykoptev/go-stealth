@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.1](https://github.com/anatolykoptev/go-stealth/compare/v1.22.0...v1.22.1) (2026-07-26)
+
+
+### Fixed
+
+* detect Cloudflare 403 managed challenges via cf-mitigated header ([#49](https://github.com/anatolykoptev/go-stealth/issues/49)) ([9471dd4](https://github.com/anatolykoptev/go-stealth/commit/9471dd4538b6e7a8c4bf510d76952d7a5dc36dd3))
+
 ## [1.22.0](https://github.com/anatolykoptev/go-stealth/compare/v1.21.2...v1.22.0) (2026-07-26)
 
 
