@@ -1,0 +1,51 @@
+{
+  "browser": "Chrome",
+  "browser_version": "144.0.7559.133",
+  "major": "144",
+  "capture_time": "2026-07-26T04:34:40.464064452Z",
+  "endpoint": "https://tls.browserleaks.com/json",
+  "mode": "headless",
+  "arch": "amd64",
+  "browser_source": "chrome-for-testing",
+  "sources": {
+    "ja3": "browserleaks",
+    "ja3n": "browserleaks",
+    "ja4": "browserleaks",
+    "ja4_o": "browserleaks",
+    "peetprint": "peet",
+    "http2": "browserleaks",
+    "headers": "peet"
+  },
+  "tls": {
+    "ja3": "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-51764-10-65037-13-45-16-11-43-17613-35-65281-5-51-23-18-27,4588-29-23-24,0",
+    "ja3_hash": "8441671ceb1ed72a7c039146b79c6efc",
+    "ja3n_hash": "bd4930bd9b000ee684830e44bab76fdf",
+    "ja4": "t13d1517h2_8daaf6152771_dcad5a053991",
+    "ja4_o": "t13d1517h2_acb858a92679_12021a5e24d1",
+    "peetprint": "GREASE-772-771|2-1.1|GREASE-4588-29-23-24|1027-2052-1025-1283-2053-1281-2054-1537|1|2|GREASE-4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53|0-10-11-13-16-17613-18-23-27-35-43-45-5-51-51764-65037-65281-GREASE-GREASE",
+    "peetprint_hash": "0ffa2b0b90ae9e8b2a75534def29ffd9"
+  },
+  "http2_akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144;GREASE|15663105|0|m,a,s,p",
+  "header_order": [
+    "sec-ch-ua",
+    "sec-ch-ua-mobile",
+    "sec-ch-ua-platform",
+    "accept-language",
+    "upgrade-insecure-requests",
+    "user-agent",
+    "accept",
+    "sec-fetch-site",
+    "sec-fetch-mode",
+    "sec-fetch-user",
+    "sec-fetch-dest",
+    "accept-encoding",
+    "priority"
+  ],
+  "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+  "accept_language": "en-US,en;q=0.9",
+  "accept_encoding": "gzip, deflate, br, zstd",
+  "notes": [
+    "headless mode excludes user-agent: HeadlessChrome/\u003cver\u003e != Chrome/\u003cver\u003e",
+    "headless mode excludes sec-ch-ua: brand list uses HeadlessChrome, not Google Chrome"
+  ]
+}
