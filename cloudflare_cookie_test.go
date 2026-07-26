@@ -333,3 +333,49 @@ func TestCloudflareCookieMiddleware_ExistingCookiesPreserved(t *testing.T) {
 		t.Errorf("cookie = %q, want existing cookies preserved with cf_clearance appended", capturedCookie)
 	}
 }
+
+// TestCloudflareCookieMiddleware_RetriesOn403Challenge: solve-and-retry on a
+// 403 challenge (cf-mitigated: challenge). Every existing cookie test uses 503;
+// this pins the 403 path that was silently unexercised before the issue #48 fix.
+func TestCloudflareCookieMiddleware_RetriesOn403Challenge(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockCookieProvider{}
+	var callCount int
+
+	base := func(req *Request) (*Response, error) {
+		callCount++
+		if callCount == 1 {
+			return &Response{
+				StatusCode: 403,
+				Body:       []byte("<html><title>Just a moment...</title></html>"),
+				Headers:    map[string]string{"server": "cloudflare", "cf-mitigated": "challenge"},
+			}, nil
+		}
+		return &Response{StatusCode: 200, Body: []byte("ok")}, nil
+	}
+
+	provider.solveFunc = func(domain string, challenge *CloudflareError) (string, error) {
+		if challenge.Type != ChallengeJS {
+			return "", fmt.Errorf("expected ChallengeJS at 403, got %q", challenge.Type)
+		}
+		return "cf_clearance=solved403", nil
+	}
+
+	handler := CloudflareCookieMiddleware(provider)(base)
+	resp, err := handler(&Request{
+		Method:  "GET",
+		URL:     "https://example.com/page",
+		Headers: map[string]string{},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("StatusCode = %d, want 200", resp.StatusCode)
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 calls (403 challenge + retry), got %d", callCount)
+	}
+}
