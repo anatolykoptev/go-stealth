@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/anatolykoptev/go-kit/pacing"
 )
 
 // DefaultHeaderOrder is the Chrome request-header order, taken from the
@@ -306,8 +307,10 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 				slog.String("url", req.URL),
 				slog.Int("status", resp.StatusCode),
 				slog.Int("attempt", attempt+1))
-			jitter := time.Duration(100+rand.IntN(200)) * time.Millisecond //nolint:mnd,gosec
-			time.Sleep(jitter)
+			// 100–300ms jitter between block-status retries via canonical pacing.
+			// doWithRetry has no context parameter; background context is safe
+			// here — this is a short bounded sleep (max 300ms) inside a retry loop.
+			_ = (pacing.Jitter{Min: 100 * time.Millisecond, Max: 300 * time.Millisecond}).Sleep(context.Background())
 			continue
 		}
 
