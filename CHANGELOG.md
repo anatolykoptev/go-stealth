@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.2](https://github.com/anatolykoptev/go-stealth/compare/v1.22.1...v1.22.2) (2026-07-27)
+
+
+### Changed
+
+* **pacing:** delegate jitter/pacer to go-kit/pacing ([#51](https://github.com/anatolykoptev/go-stealth/issues/51)) ([3bb7486](https://github.com/anatolykoptev/go-stealth/commit/3bb7486bf1be87aec9045ed9c1e0209da4b574fa))
+
 ## [1.22.1](https://github.com/anatolykoptev/go-stealth/compare/v1.22.0...v1.22.1) (2026-07-26)
 
 
