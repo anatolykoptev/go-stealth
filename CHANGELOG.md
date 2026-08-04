@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.3](https://github.com/anatolykoptev/go-stealth/compare/v1.22.2...v1.22.3) (2026-08-04)
+
+
+### Documentation
+
+* **readme:** correct the profile count and drop links to private repos ([1032c7b](https://github.com/anatolykoptev/go-stealth/commit/1032c7bd488b11ef20b68f5bd566c2784556572a))
+
 ## [1.22.2](https://github.com/anatolykoptev/go-stealth/compare/v1.22.1...v1.22.2) (2026-07-27)
 
 
