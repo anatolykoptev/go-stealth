@@ -33,13 +33,14 @@ type WebshareStats struct {
 // jittered refresh (interval > 0) and the 407-triggered path via
 // ReportAuthFailure. fetch must re-fetch the proxy list and return the new URL
 // slice; a failed fetch never touches the live list.
-func (w *Webshare) enableRefresh(cfg WebshareConfig, fetch func() ([]string, error)) {
+func (w *Webshare) enableRefresh(cfg WebshareConfig, fetch func(ctx context.Context) ([]string, error)) {
 	w.fetch = fetch
 	w.interval = cfg.RefreshInterval
 	w.minGap = cfg.RefreshMinGap
 
 	ctx, cancel := context.WithCancel(context.Background())
 	w.stop = cancel
+	w.ctx = ctx
 
 	if w.interval > 0 {
 		w.wg.Add(1)
@@ -67,7 +68,7 @@ func (w *Webshare) refreshLoop(ctx context.Context) {
 // an entry from the old list finish their request (strings are immutable).
 func (w *Webshare) refresh(reason string) {
 	_, _, _ = w.sf.Do("credentials", func() (any, error) {
-		list, err := w.fetch()
+		list, err := w.fetch(w.ctx)
 		if err != nil {
 			w.refreshErrs.Add(1)
 			w.logger.Warn("proxy: credential refresh failed",

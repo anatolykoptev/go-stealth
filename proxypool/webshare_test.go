@@ -56,6 +56,28 @@ func TestNewWebshare_AuthFailure(t *testing.T) {
 	}
 }
 
+// The error path must bound the response body — the refresher now hits the
+// API periodically, and a hostile or broken endpoint must not pull an
+// unbounded body into the returned error.
+func TestWebshareFetch_ErrorBodyBounded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(strings.Repeat("x", 256<<10)))
+	}))
+	defer server.Close()
+
+	_, err := NewWebshareWithConfig("test-key", WebshareConfig{
+		BaseURL:         server.URL,
+		RefreshInterval: -1,
+	})
+	if err == nil {
+		t.Fatal("expected error for 500 response")
+	}
+	if len(err.Error()) > (64<<10)+1024 {
+		t.Fatalf("error body not bounded: message is %d bytes", len(err.Error()))
+	}
+}
+
 func TestNewWebshare_EmptyResults(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

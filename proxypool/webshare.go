@@ -49,7 +49,7 @@ type Webshare struct {
 	counter atomic.Uint64
 
 	logger   *slog.Logger
-	fetch    func() ([]string, error) // nil = refresh unsupported (static creds)
+	fetch    func(ctx context.Context) ([]string, error) // nil = refresh unsupported (static creds)
 	interval time.Duration
 	minGap   time.Duration
 
@@ -64,6 +64,7 @@ type Webshare struct {
 	lastRefreshNano atomic.Int64
 
 	stop context.CancelFunc // nil when refresh was never wired
+	ctx  context.Context    // cancelled by stop; carried into in-flight fetches
 	wg   sync.WaitGroup     // refresher loop + in-flight triggered refreshes
 }
 
@@ -103,14 +104,14 @@ func NewWebshareWithConfig(apiKey string, cfg WebshareConfig) (*Webshare, error)
 	if cfg.Mode == ModeRotating {
 		return buildRotatingFromAPI(apiKey, cfg, cfg.Logger)
 	}
-	fetch := func() ([]string, error) {
-		proxies, err := fetchAllProxies(apiKey, cfg)
+	fetch := func(ctx context.Context) ([]string, error) {
+		proxies, err := fetchAllProxies(ctx, apiKey, cfg)
 		if err != nil {
 			return nil, err
 		}
 		return injectCountryModifiers(proxies, cfg.Countries, cfg.Mode), nil
 	}
-	result, err := fetch()
+	result, err := fetch(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +158,7 @@ func newWebshareFromURL(apiURL, apiKey string) (*Webshare, error) {
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	proxies, err := fetchPage(client, apiURL, apiKey)
+	proxies, err := fetchPage(context.Background(), client, apiURL, apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -180,8 +181,8 @@ func newWebshareFromURL(apiURL, apiKey string) (*Webshare, error) {
 
 // buildRotatingFromAPI fetches credentials from one API page, then builds rotating URLs.
 func buildRotatingFromAPI(apiKey string, cfg WebshareConfig, logger *slog.Logger) (*Webshare, error) {
-	fetch := func() ([]string, error) {
-		page, err := fetchPage(cfg.HTTPClient, buildBaseURL(cfg.BaseURL)+"?mode=backbone&page_size=1", apiKey)
+	fetch := func(ctx context.Context) ([]string, error) {
+		page, err := fetchPage(ctx, cfg.HTTPClient, buildBaseURL(cfg.BaseURL)+"?mode=backbone&page_size=1", apiKey)
 		if err != nil {
 			return nil, err
 		}
@@ -191,7 +192,7 @@ func buildRotatingFromAPI(apiKey string, cfg WebshareConfig, logger *slog.Logger
 		return rotatingURLs(page[0].Username, page[0].Password, cfg.Countries), nil
 	}
 
-	proxies, err := fetch()
+	proxies, err := fetch(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +222,7 @@ func newWebsharePool(list []string, logger *slog.Logger) *Webshare {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	w := &Webshare{logger: logger}
+	w := &Webshare{logger: logger, ctx: context.Background()}
 	w.setProxies(list)
 	return w
 }

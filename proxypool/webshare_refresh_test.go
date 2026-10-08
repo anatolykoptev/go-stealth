@@ -203,6 +203,110 @@ func TestWebshare_Close_StopsRefresher(t *testing.T) {
 	}
 }
 
+// Close must cancel an in-flight credential fetch: the refresher context is
+// wired into the API request, so a hung Webshare API cannot wedge Close.
+func TestWebshare_Close_CancelsInFlightFetch(t *testing.T) {
+	var apiCalls atomic.Int64
+	fetchStarted := make(chan struct{})
+	releaseFetch := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if apiCalls.Add(1) > 1 {
+			once.Do(func() { close(fetchStarted) })
+			select {
+			case <-releaseFetch:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":[{"proxy_address":"1.2.3.4","port":8080,"username":"u","password":"p"}],"next":null}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	pool, err := NewWebshareWithConfig("test-key", WebshareConfig{
+		BaseURL:         srv.URL,
+		RefreshInterval: -1,
+		RefreshMinGap:   time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("NewWebshareWithConfig: %v", err)
+	}
+
+	pool.ReportAuthFailure()
+	<-fetchStarted
+
+	closed := make(chan struct{})
+	go func() {
+		_ = pool.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(3 * time.Second):
+		close(releaseFetch) // unwind so httptest cleanup cannot hang
+		t.Fatal("Close blocked on an in-flight credential fetch — the fetch ignores the refresher context")
+	}
+}
+
+// A 407 trigger arriving while a refresh is already in flight must join the
+// in-flight fetch (singleflight), not start a second one. This is the part
+// min-gap alone cannot cover: the first trigger always passes the gap check.
+func TestWebshare_TriggeredRefresh_CoalescesWithInFlightFetch(t *testing.T) {
+	var apiCalls atomic.Int64
+	fetchStarted := make(chan struct{})
+	releaseFetch := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if apiCalls.Add(1) > 1 {
+			once.Do(func() { close(fetchStarted) })
+			select {
+			case <-releaseFetch:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":[{"proxy_address":"1.2.3.4","port":8080,"username":"u","password":"p"}],"next":null}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	pool, err := NewWebshareWithConfig("test-key", WebshareConfig{
+		BaseURL:         srv.URL,
+		RefreshInterval: -1,
+		RefreshMinGap:   time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("NewWebshareWithConfig: %v", err)
+	}
+	callsBefore := apiCalls.Load()
+
+	refreshDone := make(chan struct{})
+	go func() {
+		pool.refresh("periodic")
+		close(refreshDone)
+	}()
+	<-fetchStarted
+
+	pool.ReportAuthFailure()
+	// Give the trigger goroutine a scheduling margin so its sf.Do lands while
+	// the fetch above is still blocked — otherwise it may start a second call
+	// legitimately after the first completes.
+	time.Sleep(100 * time.Millisecond)
+	close(releaseFetch)
+	<-refreshDone
+
+	waitFor(t, "coalesced refresh to complete", func() bool {
+		return pool.Stats().RefreshSuccesses >= 1
+	})
+	if err := pool.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := apiCalls.Load() - callsBefore; got != 1 {
+		t.Fatalf("407 trigger during in-flight refresh must coalesce into 1 fetch, got %d", got)
+	}
+}
+
 // Pools built without API access (rotating creds, no key) cannot refresh —
 // ReportAuthFailure must still count safely without panicking.
 func TestWebshareRotating_ReportAuthFailure_NoRefreshPath(t *testing.T) {

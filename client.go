@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/anatolykoptev/go-kit/pacing"
@@ -44,11 +46,14 @@ type BrowserClient struct {
 	doer         HTTPDoer
 	headerOrder  []string
 	proxyPool    ProxyPoolProvider // nil = no auto-rotation
+	poolCloser   io.Closer         // non-nil only for pools the client owns (option-created)
 	middlewares  []Middleware
 	handler      Handler // lazy-built from middlewares + base handler
 	debug        bool
 	blockRetries int // extra retry attempts on 403/429 (requires proxyPool)
 	identity     BrowserIdentity
+	closeOnce    sync.Once
+	closeErr     error
 
 	// requestURLGuard is the pre-request (tier-3) SSRF check on the initial
 	// target URL, evaluated before the (possibly proxied) fetch. nil = no
@@ -102,6 +107,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		doer:            doer,
 		headerOrder:     order,
 		proxyPool:       cfg.proxyPool,
+		poolCloser:      cfg.poolCloser,
 		debug:           cfg.debug,
 		blockRetries:    cfg.blockRetries,
 		requestURLGuard: cfg.requestURLGuard,
@@ -225,6 +231,20 @@ func (bc *BrowserClient) GetCookieValue(rawURL, name string) string {
 	return bc.doer.GetCookieValue(rawURL, name)
 }
 
+// Close releases resources the client owns. Only pools the client created
+// itself — via WithWebshareCountry or WithWebshareRotating — are closed
+// (this stops the Webshare credential refresher); a pool supplied through
+// WithProxyPool belongs to the caller and is left alone. Idempotent; returns
+// the owned pool's first close error, if any.
+func (bc *BrowserClient) Close() error {
+	bc.closeOnce.Do(func() {
+		if bc.poolCloser != nil {
+			bc.closeErr = bc.poolCloser.Close()
+		}
+	})
+	return bc.closeErr
+}
+
 // DoWithHeaderOrder executes a request with a custom header order.
 // Middleware and proxy rotation are applied.
 func (bc *BrowserClient) DoWithHeaderOrder(method, urlStr string, headers map[string]string, body io.Reader, order []string) ([]byte, map[string]string, int, error) {
@@ -288,6 +308,15 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 			if errors.Is(err, ErrSSRFBlocked) {
 				return nil, nil, 0, err
 			}
+			// A proxy 407 reaches here as a transport ERROR, not a response:
+			// both real backends tunnel through CONNECT and surface the
+			// rejection in err (the resp.StatusCode == 407 check below never
+			// sees it). Report it so a refreshing pool re-fetches credentials.
+			if bc.proxyPool != nil && isProxyAuthError(err) {
+				if r, ok := bc.proxyPool.(authFailureReporter); ok {
+					r.ReportAuthFailure()
+				}
+			}
 			// Retry on proxy errors (502, connection refused, etc.) with a new proxy.
 			if attempt < maxAttempts-1 && bc.proxyPool != nil {
 				slog.Debug("request error, retrying with new proxy",
@@ -329,6 +358,20 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 
 	// Unreachable, but satisfies compiler.
 	return nil, nil, 0, nil
+}
+
+// isProxyAuthError reports whether a transport error is the proxy's 407
+// rejection of its credentials. Neither backend exposes a typed error for it:
+// tls-client returns a plain "Proxy responded with non 200 code: 407 <reason>",
+// and net/http strips the status code entirely, leaving only the reason
+// phrase ("proxyconnect"/"Get ...": Proxy Authentication Required). Matching
+// either form covers both backends — the reason-phrase check catches
+// net/http and tls-client's standard-reason text, the "non 200 code: 407"
+// form catches tls-client when a proxy answers 407 with a custom reason.
+func isProxyAuthError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "Proxy Authentication Required") ||
+		strings.Contains(msg, "non 200 code: 407")
 }
 
 // transportProxyProvider is a subset of proxypool.ProxyPool used for type assertion.
