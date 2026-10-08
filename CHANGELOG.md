@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.4](https://github.com/anatolykoptev/go-stealth/compare/v1.22.3...v1.22.4) (2026-10-08)
+
+
+### Fixed
+
+* **proxypool:** refresh Webshare credentials periodically and on 407 ([#55](https://github.com/anatolykoptev/go-stealth/issues/55)) ([#56](https://github.com/anatolykoptev/go-stealth/issues/56)) ([b46e7be](https://github.com/anatolykoptev/go-stealth/commit/b46e7beb099fd8f8b71071e141b838e5384632a8))
+
 ## [1.22.3](https://github.com/anatolykoptev/go-stealth/compare/v1.22.2...v1.22.3) (2026-08-04)
 
 
