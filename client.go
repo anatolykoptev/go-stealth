@@ -302,6 +302,16 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 			return nil, nil, 0, err
 		}
 
+		// A 407 is the proxy rejecting its credentials — report it so a pool
+		// that can refresh (e.g. *proxypool.Webshare) re-fetches them, then
+		// return the response as-is. Not a block status: every pool entry
+		// shares the same account credentials, so rotation cannot help.
+		if bc.proxyPool != nil && resp.StatusCode == http.StatusProxyAuthRequired {
+			if r, ok := bc.proxyPool.(authFailureReporter); ok {
+				r.ReportAuthFailure()
+			}
+		}
+
 		if attempt < maxAttempts-1 && isBlockStatus(resp.StatusCode) {
 			slog.Debug("block status, retrying with new proxy",
 				slog.String("url", req.URL),
@@ -324,6 +334,12 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 // transportProxyProvider is a subset of proxypool.ProxyPool used for type assertion.
 type transportProxyProvider interface {
 	TransportProxy() func(*http.Request) (*url.URL, error)
+}
+
+// authFailureReporter mirrors proxypool.AuthFailureReporter for type
+// assertion — pools that react to HTTP 407 (e.g. *proxypool.Webshare).
+type authFailureReporter interface {
+	ReportAuthFailure()
 }
 
 // oxBrowserProxyFn extracts a TransportProxy function from pool if it supports it.
