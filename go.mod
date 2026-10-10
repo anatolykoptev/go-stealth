@@ -3,13 +3,13 @@ module github.com/anatolykoptev/go-stealth
 go 1.26.3
 
 require (
+	github.com/anatolykoptev/go-kit v0.97.18
 	github.com/bogdanfinn/fhttp v0.6.8
 	github.com/bogdanfinn/tls-client v1.15.1
 	golang.org/x/sync v0.22.0
 )
 
 require (
-	github.com/anatolykoptev/go-kit v0.97.8 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/bdandy/go-errors v1.2.2 // indirect
 	github.com/bdandy/go-socks4 v1.2.3 // indirect
