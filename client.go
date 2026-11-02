@@ -52,6 +52,7 @@ type BrowserClient struct {
 	debug        bool
 	blockRetries int // extra retry attempts on 403/429 (requires proxyPool)
 	identity     BrowserIdentity
+	doerCloser   io.Closer // non-nil only when the client built its own default tls-client doer
 	closeOnce    sync.Once
 	closeErr     error
 
@@ -103,8 +104,19 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		order = DefaultHeaderOrder
 	}
 
+	var doerCloser io.Closer
+	if cfg.backend == nil {
+		// Default backend: the client built this doer itself and is its sole
+		// owner. A backend supplied via WithBackend/WithStdHTTP belongs to the
+		// caller and is never closed here.
+		if tc, ok := doer.(*tlsClientDoer); ok {
+			doerCloser = tc
+		}
+	}
+
 	bc := &BrowserClient{
 		doer:            doer,
+		doerCloser:      doerCloser,
 		headerOrder:     order,
 		proxyPool:       cfg.proxyPool,
 		poolCloser:      cfg.poolCloser,
@@ -234,12 +246,18 @@ func (bc *BrowserClient) GetCookieValue(rawURL, name string) string {
 // Close releases resources the client owns. Only pools the client created
 // itself — via WithWebshareCountry or WithWebshareRotating — are closed
 // (this stops the Webshare credential refresher); a pool supplied through
-// WithProxyPool belongs to the caller and is left alone. Idempotent; returns
-// the owned pool's first close error, if any.
+// WithProxyPool belongs to the caller and is left alone. Likewise the default
+// tls-client backend is closed (releasing its connections, including HTTP/3
+// sockets), while a backend supplied through WithBackend or WithStdHTTP
+// belongs to the caller and is left alone. Idempotent; returns the owned
+// pool's first close error, if any (the doer is closed regardless).
 func (bc *BrowserClient) Close() error {
 	bc.closeOnce.Do(func() {
 		if bc.poolCloser != nil {
 			bc.closeErr = bc.poolCloser.Close()
+		}
+		if bc.doerCloser != nil {
+			_ = bc.doerCloser.Close() // tlsClientDoer.Close never errors
 		}
 	})
 	return bc.closeErr

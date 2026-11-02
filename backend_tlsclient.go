@@ -13,6 +13,10 @@ import (
 	"github.com/bogdanfinn/tls-client/profiles"
 )
 
+// newHTTPClient is the tls-client constructor; a var so tests can substitute a
+// recording client to observe Close.
+var newHTTPClient = tls_client.NewHttpClient
+
 // tlsClientDoer wraps bogdanfinn/tls-client as an HTTPDoer.
 type tlsClientDoer struct {
 	client tls_client.HttpClient
@@ -65,7 +69,7 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 		opts = append(opts, tls_client.WithDisableHttp3())
 	}
 
-	client, err := tls_client.NewHttpClient(nil, opts...)
+	client, err := newHTTPClient(nil, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("tls-client init: %w", err)
 	}
@@ -151,6 +155,14 @@ func (t *tlsClientDoer) Do(req *Request) (*Response, error) {
 	}
 
 	return &Response{Body: data, Headers: respHeaders, StatusCode: resp.StatusCode}, nil
+}
+
+// Close releases the underlying tls-client's connections and transports,
+// including HTTP/3 UDP sockets that CloseIdleConnections leaves open. It
+// always returns nil (tls-client's Close has no error result).
+func (t *tlsClientDoer) Close() error {
+	t.client.Close()
+	return nil
 }
 
 func (t *tlsClientDoer) SetProxy(proxyURL string) error {
