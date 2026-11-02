@@ -104,3 +104,16 @@ func TestBrowserClient_Close_PoolErrorStillReturnedAndDoerClosed(t *testing.T) {
 		t.Fatalf("doer closed %d times, want 1", got)
 	}
 }
+
+// WithBackend(nil) means "default backend": the client builds it, so it owns it.
+func TestBrowserClient_Close_WithBackendNilIsOwned(t *testing.T) {
+	rec := &closeRecorder{}
+	bc, err := NewClient(WithBackend(nil), recordingTLS(rec))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	_ = bc.Close()
+	if got := rec.closes.Load(); got != 1 {
+		t.Fatalf("default backend via WithBackend(nil) closed %d times, want 1", got)
+	}
+}

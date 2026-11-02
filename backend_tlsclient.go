@@ -181,17 +181,20 @@ func (t *tlsClientDoer) Close() error {
 // SetProxy switches the proxy. It is a no-op when proxyURL equals the value
 // already applied, so a client whose proxy does not change keeps its
 // connections (tls-client rebuilds the whole transport on every SetProxy, even
-// for an unchanged value). On a change the old transport's connections are
-// released first, because tls-client drops the previous transport unclosed.
-// A failed SetProxy keeps tls-client on its previous proxy; the old
-// connections are already closed and the next request redials.
+// for an unchanged value). On a change the old transport's idle connections
+// are released first, because tls-client drops the previous transport
+// unclosed. Requests in flight are left alone (Close would drop the cached
+// transport under them and fail concurrent HTTP/1 dials with
+// errProtocolChanged), and the old transport's HTTP/3 sockets are not
+// released. A failed SetProxy keeps tls-client on its previous proxy; the old
+// idle connections are already closed and the next request redials.
 func (t *tlsClientDoer) SetProxy(proxyURL string) error {
 	t.proxyMu.Lock()
 	defer t.proxyMu.Unlock()
 	if proxyURL == t.proxy {
 		return nil
 	}
-	t.client.Close()
+	t.client.CloseIdleConnections()
 	if err := t.client.SetProxy(proxyURL); err != nil {
 		return err
 	}

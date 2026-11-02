@@ -141,7 +141,7 @@ func WithProxyPool(pool ProxyPoolProvider) ClientOption {
 func WithBackend(factory BackendFactory) ClientOption {
 	return func(c *clientConfig) {
 		c.backend = factory
-		c.callerBackend = true
+		c.callerBackend = factory != nil // nil factory = client builds the default backend
 	}
 }
 
