@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.25.0](https://github.com/anatolykoptev/go-stealth/compare/v1.24.0...v1.25.0) (2026-11-02)
+
+
+### Added
+
+* **client:** add CloseIdleConnections ([#64](https://github.com/anatolykoptev/go-stealth/issues/64)) ([c7eec72](https://github.com/anatolykoptev/go-stealth/commit/c7eec72c1c2cdff59e5c1c860e467332f563d30d))
+
 ## [1.24.0](https://github.com/anatolykoptev/go-stealth/compare/v1.23.0...v1.24.0) (2026-11-02)
 
 
