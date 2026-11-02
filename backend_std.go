@@ -112,6 +112,11 @@ func (s *stdDoer) Close() error {
 	return nil
 }
 
+// CloseIdleConnections closes the transport's idle connections only.
+func (s *stdDoer) CloseIdleConnections() {
+	s.client.CloseIdleConnections()
+}
+
 func (s *stdDoer) SetProxy(proxyURL string) error {
 	u, err := url.Parse(proxyURL)
 	if err != nil {

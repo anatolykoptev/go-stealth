@@ -178,6 +178,12 @@ func (t *tlsClientDoer) Close() error {
 	return nil
 }
 
+// CloseIdleConnections closes the tls-client's idle connections only; unlike
+// Close it leaves requests in flight alone and is safe beside Do.
+func (t *tlsClientDoer) CloseIdleConnections() {
+	t.client.CloseIdleConnections()
+}
+
 // SetProxy switches the proxy. It is a no-op when proxyURL equals the value
 // already applied, so a client whose proxy does not change keeps its
 // connections (tls-client rebuilds the whole transport on every SetProxy, even

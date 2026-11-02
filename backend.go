@@ -58,3 +58,9 @@ type HTTPDoer interface {
 
 // BackendFactory creates an HTTPDoer from configuration.
 type BackendFactory func(cfg BackendConfig) (HTTPDoer, error)
+
+// idleCloser is optionally implemented by backends that can drop their idle
+// connections without disturbing requests in flight.
+type idleCloser interface {
+	CloseIdleConnections()
+}
