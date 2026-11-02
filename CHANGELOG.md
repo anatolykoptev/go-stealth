@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.24.0](https://github.com/anatolykoptev/go-stealth/compare/v1.23.0...v1.24.0) (2026-11-02)
+
+
+### Added
+
+* **deps:** move to Go 1.27 and close the backend ([#61](https://github.com/anatolykoptev/go-stealth/issues/61)) ([307927f](https://github.com/anatolykoptev/go-stealth/commit/307927f94f5b89a2c107feaf0b44eee63c70f0fa))
+
 ## [1.23.0](https://github.com/anatolykoptev/go-stealth/compare/v1.22.4...v1.23.0) (2026-10-10)
 
 
