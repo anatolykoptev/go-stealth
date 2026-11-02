@@ -52,7 +52,8 @@ type BrowserClient struct {
 	debug        bool
 	blockRetries int // extra retry attempts on 403/429 (requires proxyPool)
 	identity     BrowserIdentity
-	doerCloser   io.Closer // non-nil only for a doer the client built itself (not WithBackend)
+	doerCloser   io.Closer  // non-nil only for a doer the client built itself (not WithBackend)
+	doerIdler    idleCloser // same ownership rule as doerCloser
 	closeOnce    sync.Once
 	closeErr     error
 
@@ -109,13 +110,16 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 	// backend and WithStdHTTP). A doer from a caller's WithBackend factory
 	// belongs to the caller and is never closed here.
 	var doerCloser io.Closer
+	var doerIdler idleCloser
 	if !cfg.callerBackend {
 		doerCloser, _ = doer.(io.Closer)
+		doerIdler, _ = doer.(idleCloser)
 	}
 
 	bc := &BrowserClient{
 		doer:            doer,
 		doerCloser:      doerCloser,
+		doerIdler:       doerIdler,
 		headerOrder:     order,
 		proxyPool:       cfg.proxyPool,
 		poolCloser:      cfg.poolCloser,
@@ -240,6 +244,17 @@ func (bc *BrowserClient) SetProxy(proxyURL string) error {
 // GetCookieValue returns the value of a named cookie for the given URL.
 func (bc *BrowserClient) GetCookieValue(rawURL, name string) string {
 	return bc.doer.GetCookieValue(rawURL, name)
+}
+
+// CloseIdleConnections closes the idle connections of the backend the client
+// built itself (the default tls-client, or WithStdHTTP); a backend supplied
+// through WithBackend belongs to the caller and is left alone. A connection
+// in use is left alone, and one opened later idles out by itself. Unlike
+// Close it is safe to call concurrently with Do, repeatedly, and after Close.
+func (bc *BrowserClient) CloseIdleConnections() {
+	if bc.doerIdler != nil {
+		bc.doerIdler.CloseIdleConnections()
+	}
 }
 
 // Close releases resources the client owns. Only pools the client created
