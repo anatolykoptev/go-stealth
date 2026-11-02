@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -161,3 +162,37 @@ func TestLive_SetProxyUnchanged_KeepsConnection(t *testing.T) {
 		})
 	}
 }
+
+func TestLive_CloseIdleConnections_ReleasesIdleAndClientStillWorks(t *testing.T) {
+	forEachLive(t, func(t *testing.T, bc *BrowserClient, srv *httptest.Server, cc *connCounter) {
+		liveGet(t, bc, srv.URL)
+		cc.waitOpen(t, 1, "after request (precondition)")
+		bc.CloseIdleConnections()
+		cc.waitOpen(t, 0, "after CloseIdleConnections")
+		liveGet(t, bc, srv.URL) // still usable
+		bc.CloseIdleConnections()
+		bc.CloseIdleConnections() // repeated
+		_ = bc.Close()
+		bc.CloseIdleConnections() // after Close
+		cc.waitOpen(t, 0, "after Close")
+	})
+}
+
+func TestLive_CloseIdleConnections_LeavesCallerBackendAlone(t *testing.T) {
+	be := &idleBackend{}
+	bc, err := NewClient(WithBackend(func(BackendConfig) (HTTPDoer, error) { return be, nil }))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	bc.CloseIdleConnections()
+	if got := be.idle.Load(); got != 0 {
+		t.Fatalf("caller-supplied backend had CloseIdleConnections called %d times, want 0", got)
+	}
+}
+
+type idleBackend struct {
+	closableBackend
+	idle atomic.Int32
+}
+
+func (b *idleBackend) CloseIdleConnections() { b.idle.Add(1) }
