@@ -13,24 +13,24 @@ import (
 type closeRecorder struct {
 	tls_client.HttpClient
 	closes atomic.Int32
+	idle   atomic.Int32
 }
 
-func (c *closeRecorder) Close() { c.closes.Add(1) }
+func (c *closeRecorder) Close()                { c.closes.Add(1) }
+func (c *closeRecorder) CloseIdleConnections() { c.idle.Add(1) }
 
-func withRecordingTLSClient(t *testing.T) *closeRecorder {
-	t.Helper()
-	rec := &closeRecorder{}
-	orig := newHTTPClient
-	newHTTPClient = func(tls_client.Logger, ...tls_client.HttpClientOption) (tls_client.HttpClient, error) {
-		return rec, nil
+// recordingTLS installs rec as the client's tls-client, per client (no global).
+func recordingTLS(rec *closeRecorder) ClientOption {
+	return func(c *clientConfig) {
+		c.newHTTPClient = func(tls_client.Logger, ...tls_client.HttpClientOption) (tls_client.HttpClient, error) {
+			return rec, nil
+		}
 	}
-	t.Cleanup(func() { newHTTPClient = orig })
-	return rec
 }
 
 func TestBrowserClient_Close_ClosesBuiltTLSClientOnce(t *testing.T) {
-	rec := withRecordingTLSClient(t)
-	bc, err := NewClient()
+	rec := &closeRecorder{}
+	bc, err := NewClient(recordingTLS(rec))
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -88,9 +88,9 @@ type errCloser struct{ err error }
 func (e errCloser) Close() error { return e.err }
 
 func TestBrowserClient_Close_PoolErrorStillReturnedAndDoerClosed(t *testing.T) {
-	rec := withRecordingTLSClient(t)
+	rec := &closeRecorder{}
 	want := errors.New("pool close failed")
-	bc, err := NewClient(func(c *clientConfig) { c.poolCloser = errCloser{want} })
+	bc, err := NewClient(recordingTLS(rec), func(c *clientConfig) { c.poolCloser = errCloser{want} })
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
