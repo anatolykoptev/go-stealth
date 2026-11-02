@@ -102,6 +102,16 @@ func (s *stdDoer) Do(req *Request) (*Response, error) {
 	return &Response{Body: data, Headers: respHeaders, StatusCode: resp.StatusCode}, nil
 }
 
+// Close releases the transport's idle connections. newStdBackend's transport
+// has no idle timeout, so without this a discarded client keeps them open
+// indefinitely. A connection serving a request is left to finish; a Do after
+// Close opens new connections that nothing closes; Close must not run
+// concurrently with Do.
+func (s *stdDoer) Close() error {
+	s.client.CloseIdleConnections()
+	return nil
+}
+
 func (s *stdDoer) SetProxy(proxyURL string) error {
 	u, err := url.Parse(proxyURL)
 	if err != nil {

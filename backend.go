@@ -43,6 +43,10 @@ type BackendConfig struct {
 	// backend; an fhttp→stdlib-adapted WithCustomRedirectFunc on the tls
 	// backend). It must re-own the redirect hop cap.
 	RedirectGuard func(req *http.Request, via []*http.Request) error
+
+	// newHTTPClient is a per-client test seam for the tls-client constructor
+	// (nil = tls_client.NewHttpClient). Unexported, so callers cannot set it.
+	newHTTPClient tlsHTTPClientFactory
 }
 
 // HTTPDoer executes HTTP requests. TLS backends implement this interface.

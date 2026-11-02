@@ -7,15 +7,24 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	fhttp "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 )
 
+// tlsHTTPClientFactory has the signature of tls_client.NewHttpClient.
+type tlsHTTPClientFactory func(logger tls_client.Logger, options ...tls_client.HttpClientOption) (tls_client.HttpClient, error)
+
 // tlsClientDoer wraps bogdanfinn/tls-client as an HTTPDoer.
 type tlsClientDoer struct {
 	client tls_client.HttpClient
+
+	// proxyMu guards proxy and serialises SetProxy. proxy is the last value
+	// applied to client ("" = direct), so an unchanged SetProxy can be skipped.
+	proxyMu sync.Mutex
+	proxy   string
 }
 
 // newTLSClientBackend creates an HTTPDoer backed by bogdanfinn/tls-client.
@@ -65,11 +74,15 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 		opts = append(opts, tls_client.WithDisableHttp3())
 	}
 
-	client, err := tls_client.NewHttpClient(nil, opts...)
+	newClient := cfg.newHTTPClient
+	if newClient == nil {
+		newClient = tls_client.NewHttpClient
+	}
+	client, err := newClient(nil, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("tls-client init: %w", err)
 	}
-	return &tlsClientDoer{client: client}, nil
+	return &tlsClientDoer{client: client, proxy: cfg.ProxyURL}, nil
 }
 
 // adaptRedirect bridges the stdlib-typed RedirectGuard into the fhttp-typed
@@ -153,8 +166,40 @@ func (t *tlsClientDoer) Do(req *Request) (*Response, error) {
 	return &Response{Body: data, Headers: respHeaders, StatusCode: resp.StatusCode}, nil
 }
 
+// Close releases the tls-client's idle connections and transports, including
+// the UDP sockets of HTTP/3 transports that CloseIdleConnections keeps open.
+// A connection currently serving a request is left to finish, and an HTTP/2
+// connection used by an in-flight request can stay open until its idle
+// timeout (about 90 s). The client remains usable: a Do after Close opens new
+// connections that nothing closes, and Close must not run concurrently with
+// Do. It always returns nil (tls-client's Close has no error result).
+func (t *tlsClientDoer) Close() error {
+	t.client.Close()
+	return nil
+}
+
+// SetProxy switches the proxy. It is a no-op when proxyURL equals the value
+// already applied, so a client whose proxy does not change keeps its
+// connections (tls-client rebuilds the whole transport on every SetProxy, even
+// for an unchanged value). On a change the old transport's idle connections
+// are released first, because tls-client drops the previous transport
+// unclosed. Requests in flight are left alone (Close would drop the cached
+// transport under them and fail concurrent HTTP/1 dials with
+// errProtocolChanged), and the old transport's HTTP/3 sockets are not
+// released. A failed SetProxy keeps tls-client on its previous proxy; the old
+// idle connections are already closed and the next request redials.
 func (t *tlsClientDoer) SetProxy(proxyURL string) error {
-	return t.client.SetProxy(proxyURL)
+	t.proxyMu.Lock()
+	defer t.proxyMu.Unlock()
+	if proxyURL == t.proxy {
+		return nil
+	}
+	t.client.CloseIdleConnections()
+	if err := t.client.SetProxy(proxyURL); err != nil {
+		return err
+	}
+	t.proxy = proxyURL
+	return nil
 }
 
 func (t *tlsClientDoer) GetCookieValue(rawURL, name string) string {

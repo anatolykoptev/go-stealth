@@ -23,6 +23,8 @@ type clientConfig struct {
 	followRedirs       bool
 	debug              bool
 	backend            BackendFactory
+	callerBackend      bool                 // true when backend came from WithBackend: the caller owns that doer and Close leaves it alone
+	newHTTPClient      tlsHTTPClientFactory // test seam, per client; nil = tls_client.NewHttpClient
 	http3              bool
 	insecureSkipVerify bool
 	blockRetries       int
@@ -139,6 +141,7 @@ func WithProxyPool(pool ProxyPoolProvider) ClientOption {
 func WithBackend(factory BackendFactory) ClientOption {
 	return func(c *clientConfig) {
 		c.backend = factory
+		c.callerBackend = factory != nil // nil factory = client builds the default backend
 	}
 }
 
