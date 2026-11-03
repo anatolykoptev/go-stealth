@@ -210,7 +210,10 @@ func WithOxBrowser(url string) ClientOption {
 // A nil fn disables the connect-time guard.
 //
 // On a PROXIED client this hook sees only the proxy's address, never the real
-// target — pair it with WithRequestURLGuard (tier 3), which does.
+// target — pair it with WithRequestURLGuard (tier 3), which does. The client
+// passes the configured proxy's own endpoint (its resolved addresses and port,
+// following SetProxy) without consulting fn, so a proxy on a private address
+// stays reachable; every other address still goes through fn.
 func WithDialControl(fn func(network, address string) error) ClientOption {
 	return func(c *clientConfig) {
 		c.dialControl = tagGuardErr2(fn)
