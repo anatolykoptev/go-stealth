@@ -213,7 +213,10 @@ func WithOxBrowser(url string) ClientOption {
 // target — pair it with WithRequestURLGuard (tier 3), which does. The client
 // passes the configured proxy's own endpoint (its resolved addresses and port,
 // following SetProxy) without consulting fn, so a proxy on a private address
-// stays reachable; every other address still goes through fn.
+// stays reachable; every other address still goes through fn. The consequence:
+// a stricter caller guard is bypassed for those proxy endpoints (every proxy
+// set on this client recently, at most the last 64 distinct URLs), because
+// they are operator configuration.
 func WithDialControl(fn func(network, address string) error) ClientOption {
 	return func(c *clientConfig) {
 		c.dialControl = tagGuardErr2(fn)

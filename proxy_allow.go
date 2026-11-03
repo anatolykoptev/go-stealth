@@ -13,8 +13,19 @@ import (
 
 // proxyResolveTimeout bounds the lookup of a proxy host name when the proxy
 // is configured. A failed lookup never fails SetProxy: the proxy simply gets
-// no dial allowance, so a private address behind the name stays blocked.
+// no dial allowance, so a private address behind
+// the name stays blocked; the next SetProxy with the same value retries.
 const proxyResolveTimeout = 5 * time.Second
+
+// maxRememberedProxies bounds how many distinct proxy URLs stay allowed on one
+// client; the oldest is evicted first.
+const maxRememberedProxies = 64
+
+// lookupProxyHost resolves a proxy host name with the resolver net.Dialer
+// uses. A variable so tests can fail the lookup without touching the network.
+var lookupProxyHost = func(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+}
 
 // proxyEndpoint is the one network endpoint a configured proxy occupies: the
 // addresses its host resolved to when the proxy was configured, and its port.
@@ -71,7 +82,7 @@ func resolveProxyEndpoint(raw string) *proxyEndpoint {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), proxyResolveTimeout)
 	defer cancel()
-	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	ips, err := lookupProxyHost(ctx, host)
 	if err != nil || len(ips) == 0 {
 		return nil
 	}
@@ -82,30 +93,66 @@ func resolveProxyEndpoint(raw string) *proxyEndpoint {
 	return &proxyEndpoint{addrs: addrs, port: port}
 }
 
-// proxyAllowance tracks which proxy endpoint the client's backend is using and
-// lets the dial guard pass exactly that endpoint. The proxy is operator
-// configuration, not remote input, so the guard's job (stop a remote party
-// steering a dial to an internal address) does not apply to it. Everything
-// else the guard blocks stays blocked.
+// proxyAllowance is the set of proxy endpoints the client's dial guard lets
+// through: every proxy configured on this client recently (the last
+// maxRememberedProxies distinct URLs). All of them are operator configuration,
+// not remote input, so the guard's job (stop a remote party steering a dial to
+// an internal address) does not apply to them. Everything else stays guarded.
+//
+// A set rather than only the latest proxy, because under rotation a request
+// that read proxy P1 may dial after another goroutine switched to P2; the
+// guard cannot see which proxy a given dial was meant for.
 type proxyAllowance struct {
-	mu  sync.Mutex // serialises apply
-	eps atomic.Pointer[[]proxyEndpoint]
+	mu      sync.Mutex
+	order   []string                  // distinct URLs, oldest first
+	entries map[string]*proxyEndpoint // successfully resolved URLs only
+	snap    atomic.Pointer[[]proxyEndpoint]
 }
 
 func newProxyAllowance(initial string) *proxyAllowance {
-	a := &proxyAllowance{}
-	a.store(resolveProxyEndpoint(initial))
+	a := &proxyAllowance{entries: make(map[string]*proxyEndpoint)}
+	if ep := resolveProxyEndpoint(initial); ep != nil {
+		a.remember(initial, ep)
+	}
 	return a
 }
 
-func (a *proxyAllowance) store(eps ...*proxyEndpoint) {
-	list := make([]proxyEndpoint, 0, len(eps))
-	for _, e := range eps {
-		if e != nil {
-			list = append(list, *e)
+// remember records ep for url as the most recent proxy, evicts beyond the
+// bound and republishes the lock-free snapshot. Caller holds mu (or is the
+// constructor).
+func (a *proxyAllowance) remember(url string, ep *proxyEndpoint) {
+	for i, u := range a.order {
+		if u == url {
+			a.order = append(a.order[:i], a.order[i+1:]...)
+			break
 		}
 	}
-	a.eps.Store(&list)
+	a.order = append(a.order, url)
+	a.entries[url] = ep
+	for len(a.order) > maxRememberedProxies {
+		delete(a.entries, a.order[0])
+		a.order = a.order[1:]
+	}
+	a.publish()
+}
+
+func (a *proxyAllowance) forget(url string) {
+	for i, u := range a.order {
+		if u == url {
+			a.order = append(a.order[:i], a.order[i+1:]...)
+			break
+		}
+	}
+	delete(a.entries, url)
+	a.publish()
+}
+
+func (a *proxyAllowance) publish() {
+	list := make([]proxyEndpoint, 0, len(a.order))
+	for _, u := range a.order {
+		list = append(list, *a.entries[u])
+	}
+	a.snap.Store(&list)
 }
 
 func (a *proxyAllowance) allows(address string) bool {
@@ -118,7 +165,7 @@ func (a *proxyAllowance) allows(address string) bool {
 		return false
 	}
 	ip = ip.WithZone("").Unmap()
-	list := a.eps.Load()
+	list := a.snap.Load()
 	if list == nil {
 		return false
 	}
@@ -130,8 +177,8 @@ func (a *proxyAllowance) allows(address string) bool {
 	return false
 }
 
-// wrap returns a dial guard that passes the current proxy endpoint and defers
-// to inner for every other address.
+// wrap returns a dial guard that passes the remembered proxy endpoints and
+// defers to inner for every other address.
 func (a *proxyAllowance) wrap(inner func(network, address string) error) func(network, address string) error {
 	return func(network, address string) error {
 		switch network {
@@ -145,33 +192,30 @@ func (a *proxyAllowance) wrap(inner func(network, address string) error) func(ne
 	}
 }
 
-// apply switches the backend to proxyURL through set and moves the allowance
-// with it. While set runs both endpoints are allowed, so a dial the backend
-// makes during the switch is not refused; afterwards only the proxy the
-// backend actually ended up on is. A failed set leaves the old proxy (and
-// allowance) in force.
+// apply switches the backend to proxyURL through set. The endpoint is allowed
+// before set runs, so a dial the backend makes during the switch is not
+// refused. A proxy that was not remembered before and that set rejects is
+// forgotten again. The lookup runs outside the lock, and only when this URL
+// has no successfully resolved endpoint yet (a failed lookup is retried).
 func (a *proxyAllowance) apply(proxyURL string, set func(string) error) error {
 	a.mu.Lock()
+	ep, known := a.entries[proxyURL]
+	a.mu.Unlock()
+	if !known {
+		ep = resolveProxyEndpoint(proxyURL)
+	}
+
+	a.mu.Lock()
 	defer a.mu.Unlock()
-	old := a.snapshot()
-	next := resolveProxyEndpoint(proxyURL)
-	a.store(append(old, next)...)
+	_, wasKnown := a.entries[proxyURL]
+	if ep != nil {
+		a.remember(proxyURL, ep)
+	}
 	if err := set(proxyURL); err != nil {
-		a.store(old...)
+		if ep != nil && !wasKnown {
+			a.forget(proxyURL)
+		}
 		return err
 	}
-	a.store(next)
 	return nil
-}
-
-func (a *proxyAllowance) snapshot() []*proxyEndpoint {
-	list := a.eps.Load()
-	if list == nil {
-		return nil
-	}
-	out := make([]*proxyEndpoint, len(*list))
-	for i := range *list {
-		out[i] = &(*list)[i]
-	}
-	return out
 }

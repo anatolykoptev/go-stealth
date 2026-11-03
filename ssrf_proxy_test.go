@@ -280,12 +280,14 @@ func TestSSRFProxy_NamedProxyPinnedToResolvedAddresses(t *testing.T) {
 	}
 }
 
-// Test 3: SetProxy moves the allowance. The new proxy works end to end and the
-// old address stops being allowed.
-func TestSSRFProxy_SetProxyMovesAllowance(t *testing.T) {
+// SetProxy adds the new proxy to the allowed set: it works end to end, the
+// previous proxy stays reachable for a request still in flight, and an address
+// that was never a proxy stays blocked.
+func TestSSRFProxy_SetProxyAllowsNewProxy(t *testing.T) {
 	up := startTLSUpstream(t)
 	p1 := startTunnelProxy(t, up.Listener.Addr().String())
 	p2 := startTunnelProxy(t, up.Listener.Addr().String())
+	never := freeLoopbackAddr(t)
 
 	var guard func(network, address string) error
 	factory := func(cfg BackendConfig) (HTTPDoer, error) {
@@ -299,32 +301,69 @@ func TestSSRFProxy_SetProxyMovesAllowance(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = bc.Close() })
 
-	if err := guard("tcp", p1.addr()); err != nil {
-		t.Fatalf("precondition: first proxy blocked: %v", err)
-	}
 	if err := guard("tcp", p2.addr()); !errors.Is(err, ErrSSRFBlocked) {
 		t.Fatalf("precondition: second proxy allowed before SetProxy: %v", err)
 	}
-
 	if err := bc.SetProxy("http://" + p2.addr()); err != nil {
 		t.Fatalf("SetProxy: %v", err)
 	}
-	if err := guard("tcp", p1.addr()); !errors.Is(err, ErrSSRFBlocked) {
-		t.Fatalf("old proxy %s still allowed after SetProxy: %v", p1.addr(), err)
-	}
 	if err := guard("tcp", p2.addr()); err != nil {
 		t.Fatalf("new proxy blocked after SetProxy: %v", err)
+	}
+	if err := guard("tcp", p1.addr()); err != nil {
+		t.Fatalf("recent proxy refused after rotation (in-flight dial would fail): %v", err)
+	}
+	if err := guard("tcp", never); !errors.Is(err, ErrSSRFBlocked) {
+		t.Fatalf("address that was never a proxy allowed: %v", err)
 	}
 
 	body, _, status, err := bc.Do(http.MethodGet, "https://198.51.100.7/ok", nil, nil)
 	if err != nil || status != http.StatusOK || string(body) != "via-proxy-ok" {
 		t.Fatalf("request via new proxy: status=%d body=%q err=%v", status, body, err)
 	}
-	if p2.connects.Load() == 0 {
-		t.Fatal("request did not use the new proxy")
+	if p2.connects.Load() == 0 || p1.connects.Load() != 0 {
+		t.Fatalf("request not served by the new proxy: p1=%d p2=%d", p1.connects.Load(), p2.connects.Load())
 	}
-	if p1.connects.Load() != 0 {
-		t.Fatal("request used the old proxy")
+}
+
+// Only the most recent 64 distinct proxies stay allowed; an
+// evicted one is blocked again.
+func TestSSRFProxy_OldestProxyEvicted(t *testing.T) {
+	first := "127.0.0.1:20000"
+	bc, guard := captureDialControl(t, WithProxy("http://"+first))
+	for i := 1; i <= maxRememberedProxies; i++ {
+		if err := bc.SetProxy("http://127.0.0.1:" + strconv.Itoa(20000+i)); err != nil {
+			t.Fatalf("SetProxy: %v", err)
+		}
+	}
+	if err := guard(first); !errors.Is(err, ErrSSRFBlocked) {
+		t.Fatalf("evicted proxy still allowed: %v", err)
+	}
+	if err := guard("127.0.0.1:" + strconv.Itoa(20000+1)); err != nil {
+		t.Fatalf("recent proxy evicted too early: %v", err)
+	}
+	if err := guard("127.0.0.1:" + strconv.Itoa(20000+maxRememberedProxies)); err != nil {
+		t.Fatalf("newest proxy blocked: %v", err)
+	}
+}
+
+// A target URL naming the proxy's own address and port is refused by the
+// request-URL guard, and the proxy sees no CONNECT.
+func TestSSRFProxy_TargetNamingProxyRefused(t *testing.T) {
+	up := startTLSUpstream(t)
+	p := startTunnelProxy(t, up.Listener.Addr().String())
+	bc, err := NewClient(WithProxy("http://"+p.addr()), WithInsecureSkipVerify(), WithTimeout(10))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = bc.Close() })
+
+	_, _, _, err = bc.Do(http.MethodGet, "https://"+p.addr()+"/", nil, nil)
+	if !errors.Is(err, ErrSSRFBlocked) {
+		t.Fatalf("target naming the proxy's own endpoint not refused: err=%v", err)
+	}
+	if got := p.connects.Load(); got != 0 {
+		t.Fatalf("proxy saw %d CONNECT for a refused target", got)
 	}
 }
 
