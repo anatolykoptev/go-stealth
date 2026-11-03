@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -404,5 +407,76 @@ func acceptAndClose(ln net.Listener) {
 			return
 		}
 		_ = c.Close()
+	}
+}
+
+type logBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+// A failed proxy lookup logs a warning naming the host (never the userinfo),
+// and a later SetProxy with the same value retries the lookup instead of
+// leaving the proxy dead.
+func TestSSRFProxy_FailedLookupWarnsAndRetries(t *testing.T) {
+	var fail atomic.Bool
+	fail.Store(true)
+	var lookups atomic.Int32
+	orig := lookupProxyHost
+	lookupProxyHost = func(_ context.Context, host string) ([]netip.Addr, error) {
+		lookups.Add(1)
+		if fail.Load() {
+			return nil, errors.New("lookup " + host + ": no such host")
+		}
+		return []netip.Addr{netip.MustParseAddr("127.0.0.1")}, nil
+	}
+	buf := &logBuf{}
+	origLog := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() {
+		lookupProxyHost = orig
+		slog.SetDefault(origLog)
+	})
+
+	const proxy = "http://operator:s3cr3t@wg-proxy.test:3128"
+	bc, guard := captureDialControl(t, WithProxy(proxy))
+
+	out := buf.String()
+	if !strings.Contains(out, "wg-proxy.test") {
+		t.Fatalf("no warning naming the proxy host after a failed lookup; log=%q", out)
+	}
+	if strings.Contains(out, "s3cr3t") || strings.Contains(out, "operator") {
+		t.Fatalf("warning leaks proxy credentials: %q", out)
+	}
+	if err := guard("127.0.0.1:3128"); !errors.Is(err, ErrSSRFBlocked) {
+		t.Fatalf("unresolved proxy allowed: %v", err)
+	}
+
+	fail.Store(false)
+	if err := bc.SetProxy(proxy); err != nil {
+		t.Fatalf("SetProxy: %v", err)
+	}
+	if err := guard("127.0.0.1:3128"); err != nil {
+		t.Fatalf("same-value SetProxy did not retry the failed lookup: %v", err)
+	}
+
+	n := lookups.Load()
+	if err := bc.SetProxy(proxy); err != nil {
+		t.Fatalf("SetProxy: %v", err)
+	}
+	if got := lookups.Load(); got != n {
+		t.Fatalf("lookup repeated for a value that already resolved (%d -> %d)", n, got)
 	}
 }

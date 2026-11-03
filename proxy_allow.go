@@ -2,6 +2,7 @@ package stealth
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/netip"
 	"net/url"
@@ -13,7 +14,7 @@ import (
 
 // proxyResolveTimeout bounds the lookup of a proxy host name when the proxy
 // is configured. A failed lookup never fails SetProxy: the proxy simply gets
-// no dial allowance, so a private address behind
+// no dial allowance (and a warning is logged), so a private address behind
 // the name stays blocked; the next SetProxy with the same value retries.
 const proxyResolveTimeout = 5 * time.Second
 
@@ -84,6 +85,9 @@ func resolveProxyEndpoint(raw string) *proxyEndpoint {
 	defer cancel()
 	ips, err := lookupProxyHost(ctx, host)
 	if err != nil || len(ips) == 0 {
+		// Never log the URL: it can carry credentials.
+		slog.Warn("stealth: proxy host lookup failed; dials to the proxy stay SSRF-guarded and a private proxy address will be refused until SetProxy is called again",
+			slog.String("host", host), slog.Any("error", err))
 		return nil
 	}
 	addrs := make([]netip.Addr, len(ips))
