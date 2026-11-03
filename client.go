@@ -62,6 +62,10 @@ type BrowserClient struct {
 	// pre-request guard (WithoutSSRFGuard). This is the only tier that guards
 	// a proxied fetch's initial target.
 	requestURLGuard func(ctx context.Context, u *url.URL) error
+
+	// proxyAllow lets the dial guard pass the configured proxy's endpoint and
+	// nothing else; nil when no dial guard is installed.
+	proxyAllow *proxyAllowance
 }
 
 // ProxyPoolProvider returns the next proxy URL for rotation.
@@ -79,6 +83,15 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		return nil, cfg.buildErrors[0]
 	}
 
+	// The dial guard sees the proxy's address on a proxied client. The proxy is
+	// operator configuration, so its endpoint (and only that) is let through.
+	dialControl := cfg.dialControl
+	var proxyAllow *proxyAllowance
+	if dialControl != nil {
+		proxyAllow = newProxyAllowance(cfg.proxyURL)
+		dialControl = proxyAllow.wrap(dialControl)
+	}
+
 	backendCfg := BackendConfig{
 		Profile:            cfg.profile,
 		ProxyURL:           cfg.proxyURL,
@@ -86,7 +99,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		FollowRedirects:    cfg.followRedirs,
 		HTTP3:              cfg.http3,
 		InsecureSkipVerify: cfg.insecureSkipVerify,
-		DialControl:        cfg.dialControl,
+		DialControl:        dialControl,
 		RedirectGuard:      cfg.redirectGuard,
 		newHTTPClient:      cfg.newHTTPClient,
 	}
@@ -126,6 +139,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		debug:           cfg.debug,
 		blockRetries:    cfg.blockRetries,
 		requestURLGuard: cfg.requestURLGuard,
+		proxyAllow:      proxyAllow,
 		identity:        resolveIdentity(cfg),
 	}
 	if cfg.debug {
@@ -238,6 +252,9 @@ func (bc *BrowserClient) Do(method, urlStr string, headers map[string]string, bo
 
 // SetProxy changes the proxy URL for subsequent requests.
 func (bc *BrowserClient) SetProxy(proxyURL string) error {
+	if bc.proxyAllow != nil {
+		return bc.proxyAllow.apply(proxyURL, bc.doer.SetProxy)
+	}
 	return bc.doer.SetProxy(proxyURL)
 }
 
