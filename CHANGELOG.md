@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.25.1](https://github.com/anatolykoptev/go-stealth/compare/v1.25.0...v1.25.1) (2026-11-03)
+
+
+### Fixed
+
+* **ssrf:** let a client dial its configured proxy on a private address ([#66](https://github.com/anatolykoptev/go-stealth/issues/66)) ([d65390c](https://github.com/anatolykoptev/go-stealth/commit/d65390c2b51bcbf670ced8e241088b8c1157e306))
+
 ## [1.25.0](https://github.com/anatolykoptev/go-stealth/compare/v1.24.0...v1.25.0) (2026-11-02)
 
 
