@@ -15,9 +15,11 @@ const (
 	// zstdMaxWindow is the largest window a zstd content coding may use
 	// (RFC 9659 section 3); a bigger one is not a valid HTTP body.
 	zstdMaxWindow = 8 << 20
-	// zstdMaxDecoded bounds one decoded body so a small hostile response
-	// cannot expand without limit.
-	zstdMaxDecoded = 512 << 20
+	// zstdMaxDecoded bounds one decoded body. A few kilobytes of zstd can
+	// describe gigabytes, and the decoder allocates what the frame announces,
+	// so the cap is the per-response memory an attacker can force. 64 MiB is
+	// far above any page or API response and keeps that cost small.
+	zstdMaxDecoded = 64 << 20
 )
 
 // zstdMagic starts every zstd frame (RFC 8878 section 3.1.1).

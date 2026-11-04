@@ -116,3 +116,28 @@ func TestChromeHeaders_AdvertiseZstd(t *testing.T) {
 		t.Fatal("no Chromium profiles seen")
 	}
 }
+
+// A few kilobytes of zstd can describe hundreds of megabytes. The decoder caps
+// one decoded body at 64 MiB, far above any page or API response, so a hostile
+// response cannot make the client allocate half a gigabyte. Over the cap the
+// body is returned as received (the same tolerant path as invalid input).
+func TestDecompressBody_ZstdBombIsBounded(t *testing.T) {
+	const decoded = 65 << 20 // just over the 64 MiB cap
+	packed := zstdEncode(t, make([]byte, decoded))
+	if len(packed) > 1<<20 {
+		t.Fatalf("test precondition: %d bytes of zeros packed to %d bytes", decoded, len(packed))
+	}
+	got, err := decompressBody(packed, "zstd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) >= decoded {
+		t.Fatalf("decoded %d bytes from a %d byte body, want it refused past the cap", len(got), len(packed))
+	}
+
+	// Under the cap still decodes.
+	small := zstdEncode(t, make([]byte, 8<<20))
+	if got, _ := decompressBody(small, "zstd"); len(got) != 8<<20 {
+		t.Fatalf("8 MiB body decoded to %d bytes", len(got))
+	}
+}
