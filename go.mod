@@ -6,6 +6,7 @@ require (
 	github.com/anatolykoptev/go-kit v0.97.19
 	github.com/bogdanfinn/fhttp v0.7.3
 	github.com/bogdanfinn/tls-client v1.18.0
+	github.com/klauspost/compress v1.20.3
 	golang.org/x/sync v0.24.0
 )
 
@@ -17,7 +18,6 @@ require (
 	github.com/bogdanfinn/utls v1.8.2-barnius // indirect
 	github.com/bogdanfinn/websocket v1.5.9-barnius // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/molecule-man/go-brrr v1.3.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
