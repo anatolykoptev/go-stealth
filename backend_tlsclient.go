@@ -240,12 +240,16 @@ func (t *tlsClientDoer) GetCookieValue(rawURL, name string) string {
 
 // profileMap maps go-stealth TLSProfile values to bogdanfinn profiles.
 var profileMap = map[TLSProfile]profiles.ClientProfile{
-	ProfileChrome131:   profiles.Chrome_131,
-	ProfileChrome133:   profiles.Chrome_133,
-	ProfileChrome144:   profiles.Chrome_144,
-	ProfileChrome146:   profiles.Chrome_146,
-	ProfileChrome150:   profiles.Chrome_150,
-	ProfileChrome152:   profiles.Chrome_152,
+	ProfileChrome131: profiles.Chrome_131,
+	ProfileChrome133: profiles.Chrome_133,
+	ProfileChrome144: profiles.Chrome_144,
+	ProfileChrome146: profiles.Chrome_146,
+	ProfileChrome150: profiles.Chrome_150,
+	ProfileChrome152: profiles.Chrome_152,
+	// chrome_156 has no profile of its own in tls-client v1.18.0; Chrome_152 is
+	// the newest it ships. Measured: its JA4, ja4_r, peetprint and HTTP/2
+	// fingerprint equal those of installed Google Chrome 156.0.8078.80.
+	ProfileChrome156:   profiles.Chrome_152,
 	ProfileFirefox133:  profiles.Firefox_133,
 	ProfileFirefox148:  profiles.Firefox_148,
 	ProfileBrave146:    profiles.Brave_146,
@@ -291,6 +295,7 @@ var extensionOrderRandomised = map[TLSProfile]bool{
 	ProfileChrome146: true,
 	ProfileChrome150: true,
 	ProfileChrome152: true,
+	ProfileChrome156: true,
 	ProfileBrave146:  true,
 }
 

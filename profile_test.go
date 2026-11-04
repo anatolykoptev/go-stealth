@@ -286,8 +286,8 @@ func TestClientHintsHeaders_ChromeBrandConsistency(t *testing.T) {
 // newer profile is added.
 func TestDefaultProfileIsCurrentChrome(t *testing.T) {
 	cfg := defaultConfig()
-	if cfg.profile != ProfileChrome152 {
-		t.Fatalf("defaultConfig().profile = %q, want %q", cfg.profile, ProfileChrome152)
+	if cfg.profile != ProfileChrome156 {
+		t.Fatalf("defaultConfig().profile = %q, want %q", cfg.profile, ProfileChrome156)
 	}
 }
 

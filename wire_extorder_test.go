@@ -12,7 +12,7 @@ const extOrderSamples = 12
 // their TLS extension order per connection, as Chrome (106+) does. Brave is in
 // the set: its tls-client profile carries RandomExtensionOrder but the flag
 // is not honoured, so without the explicit client option its order is fixed.
-var modernRandomisedProfiles = []TLSProfile{ProfileChrome146, ProfileChrome150, ProfileChrome152, ProfileBrave146}
+var modernRandomisedProfiles = []TLSProfile{ProfileChrome146, ProfileChrome150, ProfileChrome152, ProfileChrome156, ProfileBrave146}
 
 // frozenOrderProfiles keep the extension order tls-client ships. chrome_131 is
 // presented on purpose by existing consumers and its wire must not move;

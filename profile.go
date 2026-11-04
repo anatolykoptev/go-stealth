@@ -76,11 +76,32 @@ func profileForTLS(p TLSProfile) (BrowserProfile, bool) {
 // only from this set; the legacy set below stays reachable through
 // UserAgentForProfile / Identity() for callers that pin an older profile.
 //
-// The newest Chrome here is bounded by the newest profile tls-client ships,
-// not by the current Chrome release: a UA newer than the TLS profile would
-// describe two different browsers.
+// The newest Chrome here is bounded by what has been measured, not by the
+// current Chrome release: a UA newer than its TLS profile would describe two
+// different browsers. chrome_156 reuses tls-client's Chrome_152 because that
+// profile's fingerprint was measured identical to Chrome 156's.
 var BuiltinProfiles = []BrowserProfile{
-	// Chrome 152 (default) — Windows first: profileForTLS returns the first match.
+	// Chrome 156 (default) — Windows first: profileForTLS returns the first match.
+	// The TLS profile is tls-client's Chrome_152, the newest it ships; its
+	// fingerprint was measured identical to installed Chrome 156 (JA4, ja4_r,
+	// peetprint, HTTP/2). Re-measure before adding a newer major the same way.
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome156, Browser: "chrome", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome156, Browser: "chrome", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome156, Browser: "chrome", OS: "linux",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+		TLSProfile: ProfileChrome156, Browser: "chrome", OS: "android", Mobile: true,
+	},
+	// Chrome 152
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
 		TLSProfile: ProfileChrome152, Browser: "chrome", OS: "windows",

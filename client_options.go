@@ -44,12 +44,13 @@ type clientConfig struct {
 
 func defaultConfig() *clientConfig {
 	return &clientConfig{
-		// The default is the newest Chrome profile tls-client ships. A
+		// The default is the newest Chrome profile whose fingerprint has been
+		// measured against the real browser (chrome_156). A
 		// consumer that calls NewClient() with no WithProfile and pairs the
 		// default JA3 with its own hardcoded User-Agent must take the UA from
 		// Identity().UserAgent (or UserAgentForProfile) instead, or it will
 		// present an old Chrome UA over this newer fingerprint.
-		profile:         ProfileChrome152,
+		profile:         ProfileChrome156,
 		timeout:         20,
 		dialControl:     defaultDenyDial,
 		redirectGuard:   defaultDenyRedirect,
