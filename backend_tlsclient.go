@@ -38,6 +38,14 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 	if cfg.FetchMode {
 		profile = withFetchPriority(profile)
 	}
+	// Chrome shuffles its TLS extension order on every connection (since 106),
+	// so a real Chrome never repeats one JA3 across connections. tls-client's
+	// Chrome profiles ship a fixed order (the profile's RandomExtensionOrder
+	// flag is not honoured), and its client-level shuffle option is biased
+	// (see extension_order.go), so the profile carries our own shuffle.
+	if randomizesExtensionOrder(cfg.Profile) {
+		profile = withUniformExtensionOrder(profile)
+	}
 
 	opts := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(cfg.TimeoutSeconds),
@@ -80,15 +88,6 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 	// legitimately advertises h3.
 	if cfg.Profile == ProfileChrome133 && !cfg.HTTP3 {
 		opts = append(opts, tls_client.WithDisableHttp3())
-	}
-
-	// Chrome shuffles its TLS extension order on every connection (since 106),
-	// so a real Chrome never repeats one JA3 across connections. tls-client's
-	// Chrome profiles ship a fixed order (RandomExtensionOrder is not honoured
-	// from the profile), so the client-level option is what makes the order
-	// vary. GREASE stays first and last; only the other extensions move.
-	if randomizesExtensionOrder(cfg.Profile) {
-		opts = append(opts, tls_client.WithRandomTLSExtensionOrder())
 	}
 
 	newClient := cfg.newHTTPClient
@@ -271,14 +270,8 @@ const fetchPriorityWire = 219
 // priority on the profile and exposes no per-request override, which is why
 // fetch mode is a client-level choice.
 func withFetchPriority(p profiles.ClientProfile) profiles.ClientProfile {
-	return profiles.NewClientProfile(
-		p.GetClientHelloId(), p.GetSettings(), p.GetSettingsOrder(), p.GetPseudoHeaderOrder(),
-		p.GetConnectionFlow(), p.GetPriorities(),
-		&http2.PriorityParam{StreamDep: 0, Exclusive: true, Weight: fetchPriorityWire},
-		p.GetStreamID(), p.GetAllowHTTP(),
-		p.GetHttp3Settings(), p.GetHttp3SettingsOrder(), p.GetHttp3PriorityParam(),
-		p.GetHttp3PseudoHeaderOrder(), p.GetHttp3SendGreaseFrames(),
-	)
+	return cloneProfile(p, p.GetClientHelloId(),
+		&http2.PriorityParam{StreamDep: 0, Exclusive: true, Weight: fetchPriorityWire})
 }
 
 // isChromiumTLSProfile reports whether p is a Chrome-family TLS profile.
