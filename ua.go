@@ -1,6 +1,9 @@
 package stealth
 
-import "math/rand/v2"
+import (
+	"math/rand/v2"
+	"strconv"
+)
 
 // RandomUserAgents is a pool of browser User-Agents for rotation, for callers
 // that do not care which browser they look like (connectivity probes).
@@ -95,12 +98,31 @@ func withHints(h, hints map[string]string) map[string]string {
 	return h
 }
 
+// navigationAcceptFrom156 is the navigation Accept of Chrome 156 and later:
+// image/jxl is listed ahead of image/avif. Chrome for Testing 131 and 152 do
+// not send it; 156 does (both branded and Chrome for Testing). The version
+// between 153 and 156 in which it first appeared is not pinned, so the cut is
+// at the first major measured with it.
+const (
+	navigationAccept        = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+	navigationAcceptFrom156 = "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+	jxlAcceptFirstMajor     = 156
+)
+
+// navigationAcceptFor returns the navigation Accept for the Chrome major in ua.
+func navigationAcceptFor(ua string) string {
+	if maj, err := strconv.Atoi(ExtractChromeVersion(ua)); err == nil && maj >= jxlAcceptFirstMajor {
+		return navigationAcceptFrom156
+	}
+	return navigationAccept
+}
+
 func chromeNavigationHeaders(ua string) map[string]string {
 	return map[string]string{
 		"accept-language":           "en-US,en;q=0.9",
 		"upgrade-insecure-requests": "1",
 		"user-agent":                ua,
-		"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		"accept":                    navigationAcceptFor(ua),
 		"sec-fetch-site":            "none",
 		"sec-fetch-mode":            "navigate",
 		"sec-fetch-user":            "?1",

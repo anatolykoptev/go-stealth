@@ -64,8 +64,9 @@ type liveRef struct {
 			Exclusive bool
 			DependsOn int `json:"depends_on"`
 		}
-		RequestHeaderNames []string `json:"request_header_names"`
-		PriorityHeader     string   `json:"priority_header"`
+		RequestHeaderNames []string          `json:"request_header_names"`
+		RequestHeaders     map[string]string `json:"request_headers"`
+		PriorityHeader     string            `json:"priority_header"`
 	}
 }
 
@@ -156,6 +157,12 @@ func measureLive(t *testing.T, headers map[string]string, opts ...ClientOption) 
 				continue
 			}
 			m.ref.HTTP2.RequestHeaderNames = append(m.ref.HTTP2.RequestHeaderNames, n)
+			if m.ref.HTTP2.RequestHeaders == nil {
+				m.ref.HTTP2.RequestHeaders = map[string]string{}
+			}
+			if _, dup := m.ref.HTTP2.RequestHeaders[n]; !dup {
+				m.ref.HTTP2.RequestHeaders[n] = v
+			}
 			if n == "priority" {
 				m.ref.HTTP2.PriorityHeader = v
 			}
@@ -211,6 +218,12 @@ func logTable(t *testing.T, title string, rows []liveRow) {
 	}
 }
 
+// liveValueHeaders are the standard headers whose values are compared.
+var liveValueHeaders = []string{
+	"accept", "accept-encoding", "accept-language", "priority", "sec-ch-ua", "sec-ch-ua-mobile",
+	"sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest", "upgrade-insecure-requests", "user-agent",
+}
+
 func hdrNames(ns []string) string { return strings.Join(ns, ",") }
 
 // keepNames returns the entries of ref that also occur in keep, in ref's order.
@@ -235,8 +248,16 @@ func TestWireLive(t *testing.T) {
 		// keep DefaultHeaderOrder (Chrome for Testing order), which is not
 		// the branded-Chrome order of the reference, so theirs is information.
 		assertOrder bool
-		varyJA3     bool // true: JA3 must differ across connections; false: must be constant
-		tlsExact    bool
+		// assertValues: header values are compared hard. chrome_152 is
+		// shown against the Chrome 156 capture, whose accept and sec-ch-ua
+		// legitimately differ, so its values are information.
+		assertValues bool
+		// infoValues are value headers shown but not asserted: Chrome for
+		// Testing (the chrome_131 reference) is unbranded, so its sec-ch-ua
+		// has no "Google Chrome" brand.
+		infoValues []string
+		varyJA3    bool // true: JA3 must differ across connections; false: must be constant
+		tlsExact   bool
 		// pinned: expected values recorded from this client, used when the
 		// reference is not the right oracle (chrome_131).
 		pinned *liveRef
@@ -265,11 +286,11 @@ func TestWireLive(t *testing.T) {
 	pin131.HTTP2.Akamai = "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p"
 
 	cases := []tc{
-		{name: "chrome_156 navigation", opts: []ClientOption{WithProfile(ProfileChrome156)}, profile: bpFor(ProfileChrome156), ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true, assertOrder: true},
-		{name: "default navigation", opts: nil, profile: defProfile, ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true, assertOrder: true},
-		{name: "chrome_152 navigation", opts: []ClientOption{WithProfile(ProfileChrome152)}, profile: bpFor(ProfileChrome152), ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true},
-		{name: "chrome_156 fetch", opts: []ClientOption{WithProfile(ProfileChrome156), WithFetchMode()}, profile: bpFor(ProfileChrome156), fetch: true, ref: "google_chrome_156_fetch.json", varyJA3: true, assertOrder: true},
-		{name: "chrome_131 navigation", opts: []ClientOption{WithProfile(ProfileChrome131)}, profile: bpFor(ProfileChrome131), ref: "cft_131_nav.json", varyJA3: false, pinned: &pin131},
+		{name: "chrome_156 navigation", opts: []ClientOption{WithProfile(ProfileChrome156)}, profile: bpFor(ProfileChrome156), ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true, assertOrder: true, assertValues: true},
+		{name: "default navigation", opts: nil, profile: defProfile, ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true, assertOrder: true, assertValues: true},
+		{name: "chrome_152 navigation", opts: []ClientOption{WithProfile(ProfileChrome152)}, profile: bpFor(ProfileChrome152), ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true, assertOrder: true},
+		{name: "chrome_156 fetch", opts: []ClientOption{WithProfile(ProfileChrome156), WithFetchMode()}, profile: bpFor(ProfileChrome156), fetch: true, ref: "google_chrome_156_fetch.json", varyJA3: true, assertOrder: true, assertValues: true},
+		{name: "chrome_131 navigation", opts: []ClientOption{WithProfile(ProfileChrome131)}, profile: bpFor(ProfileChrome131), ref: "cft_131_nav.json", varyJA3: false, pinned: &pin131, assertValues: true, infoValues: []string{"sec-ch-ua"}},
 	}
 
 	for _, c := range cases {
@@ -317,6 +338,21 @@ func TestWireLive(t *testing.T) {
 				refNames = keepNames(refNames, oursNames)
 			}
 			add("request_header_names", hdrNames(oursNames), hdrNames(refNames), c.assertOrder)
+
+			// Header VALUES of the standard headers. user-agent is compared by
+			// Chrome major (the OS differs from the macOS capture) and
+			// sec-ch-ua-platform is left to the unit tests for the same reason.
+			for _, name := range liveValueHeaders {
+				w, ok := ref.HTTP2.RequestHeaders[name]
+				if !ok {
+					continue
+				}
+				o := last.ref.HTTP2.RequestHeaders[name]
+				if name == "user-agent" {
+					o, w = "Chrome/"+ExtractChromeVersion(o), "Chrome/"+ExtractChromeVersion(w)
+				}
+				add("value:"+name, o, w, c.assertValues && !slices.Contains(c.infoValues, name))
+			}
 
 			variance := fmt.Sprintf("%d distinct JA3 over %d connections", len(ja3), liveSamples)
 			wantVar := "varies (>1)"
