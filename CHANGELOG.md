@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.26.0](https://github.com/anatolykoptev/go-stealth/compare/v1.25.1...v1.26.0) (2026-11-04)
+
+
+### Added
+
+* coherent current browser profiles; fail on unknown profile names ([#70](https://github.com/anatolykoptev/go-stealth/issues/70)) ([4d10644](https://github.com/anatolykoptev/go-stealth/commit/4d106449165dec86d843b8aaf1eb764d2553ae67))
+
 ## [1.25.1](https://github.com/anatolykoptev/go-stealth/compare/v1.25.0...v1.25.1) (2026-11-03)
 
 
