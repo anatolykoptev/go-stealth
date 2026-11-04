@@ -142,6 +142,28 @@ go run ./cmd/fingerprint-capture -major 146   # amd64 host; no arm64 Chrome-for-
 See `testdata/README.md` for the headless caveat and the per-metric provenance
 contract.
 
+## Fetch mode
+
+By default a request is shaped like a top-level navigation (HTTP/2 priority
+weight 256, `priority: u=0, i`). `stealth.WithFetchMode()` makes a client send
+what Chrome sends for `fetch()` and XMLHttpRequest instead: weight 220 and
+`priority: u=1, i` (a priority header you set yourself is kept). The mode is
+per client because tls-client holds the HTTP/2 priority on the profile; build
+one client of each kind if you mix navigations and fetches. It needs a Chrome
+family profile and is opt-in for every profile, `chrome_131` included.
+
+## Wire check against a real browser
+
+`make fingerprint-wire` (build tag `wirelive`, network required, unreachable
+endpoint fails) measures `chrome_156`, the default client, `chrome_152`,
+fetch mode and `chrome_131` through tls.peet.ws and diffs JA4, ja4_r,
+peetprint, the HTTP/2 fingerprint and priority against the captures in
+`testdata/wire` (installed Google Chrome 156.0.8078.80; Chrome for Testing
+131 for information). JA3 must vary across connections for the modern
+profiles, as in Chrome, and stay constant for `chrome_131`. Offline,
+`wire_*_test.go` capture the ClientHello and first HTTP/2 frames on a local
+listener and pin the `chrome_131` wire byte for byte.
+
 ## Used By
 
 - [go-twitter](https://github.com/anatolykoptev/go-twitter) — Twitter/X scraping

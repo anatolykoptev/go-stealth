@@ -1,0 +1,51 @@
+{
+  "provenance": {
+    "browser": "Google Chrome",
+    "version": "156.0.8078.80",
+    "build": "stable, branded",
+    "platform": "macOS arm64",
+    "headless": false,
+    "mode": "xlike",
+    "captured_at": "2026-11-04T09:16:12Z",
+    "endpoint": "https://tls.peet.ws/api/all",
+    "note": "page fetch() with custom headers; later connection of the same session, so its TLS part carries one more extension than a first connection and is not used for TLS comparison; names of the page's own custom headers are replaced by x-custom-N, their positions kept"
+  },
+  "tls": {
+    "ja4": "t13d1518h2_8daaf6152771_e2d80978ab2e",
+    "ja4_r": "t13d1518h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,0029,002b,002d,0033,44cd,ca34,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+    "peetprint_hash": "5fa343c29062ede7d0e28fd46c1052a7"
+  },
+  "http2": {
+    "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+    "priority": {
+      "weight": 220,
+      "exclusive": true,
+      "depends_on": 0
+    },
+    "request_header_names": [
+      "sec-ch-ua-platform",
+      "authorization",
+      "x-csrf-token",
+      "sec-ch-ua",
+      "x-custom-1",
+      "sec-ch-ua-mobile",
+      "x-custom-2",
+      "x-custom-3",
+      "x-custom-4",
+      "user-agent",
+      "content-type",
+      "accept",
+      "sec-fetch-site",
+      "sec-fetch-mode",
+      "sec-fetch-dest",
+      "referer",
+      "accept-encoding",
+      "accept-language",
+      "cookie",
+      "cookie",
+      "priority"
+    ],
+    "priority_header": "u=1, i"
+  }
+}

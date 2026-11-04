@@ -1,0 +1,43 @@
+{
+  "provenance": {
+    "browser": "Google Chrome",
+    "version": "156.0.8078.80",
+    "build": "stable, branded",
+    "platform": "macOS arm64",
+    "headless": false,
+    "mode": "nav",
+    "captured_at": "2026-11-04T09:16:12Z",
+    "endpoint": "https://tls.peet.ws/api/all",
+    "note": "top-level navigation to the echo endpoint; first connection"
+  },
+  "tls": {
+    "ja4": "t13d1517h2_8daaf6152771_cb7bf5808d99",
+    "ja4_r": "t13d1517h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,ca34,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+    "peetprint_hash": "fc97c1cdfb1409c9a9326c1b726d1dee"
+  },
+  "http2": {
+    "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+    "priority": {
+      "weight": 256,
+      "exclusive": true,
+      "depends_on": 0
+    },
+    "request_header_names": [
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "upgrade-insecure-requests",
+      "user-agent",
+      "accept",
+      "sec-fetch-site",
+      "sec-fetch-mode",
+      "sec-fetch-user",
+      "sec-fetch-dest",
+      "accept-encoding",
+      "accept-language",
+      "priority"
+    ],
+    "priority_header": "u=0, i"
+  }
+}
