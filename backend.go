@@ -35,6 +35,10 @@ type BackendConfig struct {
 	// 220 on HEADERS instead of the navigation weight 256 (see WithFetchMode).
 	FetchMode bool
 
+	// CookieJar, when non-nil, replaces the backend's own cookie jar (see
+	// WithCookieJar). nil = each backend's default jar.
+	CookieJar http.CookieJar
+
 	// InsecureSkipVerify, when true, disables TLS certificate verification.
 	// Honored by the tls-client backend; the std backend verifies by default
 	// (net/http) and will honor this field when wired.

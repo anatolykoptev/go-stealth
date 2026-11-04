@@ -21,7 +21,10 @@ type stdDoer struct {
 
 // newStdBackend creates an HTTPDoer backed by standard net/http.
 func newStdBackend(cfg BackendConfig) (HTTPDoer, error) {
-	jar, _ := cookiejar.New(nil)
+	jar := cfg.CookieJar
+	if jar == nil {
+		jar, _ = cookiejar.New(nil)
+	}
 
 	transport := &http.Transport{}
 	if cfg.InsecureSkipVerify {

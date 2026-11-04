@@ -50,7 +50,13 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 	opts := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(cfg.TimeoutSeconds),
 		tls_client.WithClientProfile(profile),
-		tls_client.WithCookieJar(tls_client.NewCookieJar()),
+	}
+	if cfg.CookieJar != nil {
+		// Caller-owned jar (shared across clients, RFC 6265 ordering and
+		// scoping decided by the jar). Otherwise tls-client's own jar.
+		opts = append(opts, tls_client.WithCookieJar(adaptCookieJar(cfg.CookieJar)))
+	} else {
+		opts = append(opts, tls_client.WithCookieJar(tls_client.NewCookieJar()))
 	}
 	if cfg.InsecureSkipVerify {
 		opts = append(opts, tls_client.WithInsecureSkipVerify())
@@ -310,4 +316,66 @@ func mapTLSProfile(p TLSProfile) (profiles.ClientProfile, error) {
 		return mapped, nil
 	}
 	return profiles.ClientProfile{}, fmt.Errorf("%w: %q", ErrUnknownTLSProfile, string(p))
+}
+
+// cookieJarAdapter exposes a stdlib http.CookieJar as the fhttp.CookieJar that
+// tls-client's WithCookieJar expects, so bogdanfinn/fhttp stays out of
+// go-stealth's public API (WithCookieJar takes net/http types). Every
+// decision about scoping (Domain, Path, Secure), expiry/deletion and ordering
+// is the wrapped jar's; the adapter only copies cookie fields, in order.
+type cookieJarAdapter struct {
+	jar http.CookieJar
+}
+
+// adaptCookieJar wraps jar for tls-client.
+func adaptCookieJar(jar http.CookieJar) fhttp.CookieJar {
+	return &cookieJarAdapter{jar: jar}
+}
+
+func (a *cookieJarAdapter) SetCookies(u *url.URL, cookies []*fhttp.Cookie) {
+	std := make([]*http.Cookie, 0, len(cookies))
+	for _, c := range cookies {
+		if c == nil {
+			continue
+		}
+		std = append(std, &http.Cookie{
+			Name:       c.Name,
+			Value:      c.Value,
+			Quoted:     c.Quoted,
+			Path:       c.Path,
+			Domain:     c.Domain,
+			Expires:    c.Expires,
+			RawExpires: c.RawExpires,
+			MaxAge:     c.MaxAge,
+			Secure:     c.Secure,
+			HttpOnly:   c.HttpOnly,
+			SameSite:   http.SameSite(c.SameSite),
+			Raw:        c.Raw,
+			Unparsed:   c.Unparsed,
+		})
+	}
+	a.jar.SetCookies(u, std)
+}
+
+func (a *cookieJarAdapter) Cookies(u *url.URL) []*fhttp.Cookie {
+	std := a.jar.Cookies(u)
+	out := make([]*fhttp.Cookie, 0, len(std))
+	for _, c := range std {
+		out = append(out, &fhttp.Cookie{
+			Name:       c.Name,
+			Value:      c.Value,
+			Quoted:     c.Quoted,
+			Path:       c.Path,
+			Domain:     c.Domain,
+			Expires:    c.Expires,
+			RawExpires: c.RawExpires,
+			MaxAge:     c.MaxAge,
+			Secure:     c.Secure,
+			HttpOnly:   c.HttpOnly,
+			SameSite:   fhttp.SameSite(c.SameSite),
+			Raw:        c.Raw,
+			Unparsed:   c.Unparsed,
+		})
+	}
+	return out
 }
