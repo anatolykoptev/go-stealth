@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.26.1](https://github.com/anatolykoptev/go-stealth/compare/v1.26.0...v1.26.1) (2026-11-04)
+
+
+### Fixed
+
+* headers that match the client's own browser profile ([#72](https://github.com/anatolykoptev/go-stealth/issues/72)) ([b256cab](https://github.com/anatolykoptev/go-stealth/commit/b256caba2b2261268573468c1f232127e8f0fa91))
+
 ## [1.26.0](https://github.com/anatolykoptev/go-stealth/compare/v1.25.1...v1.26.0) (2026-11-04)
 
 
