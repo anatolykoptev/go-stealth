@@ -1,6 +1,7 @@
 package stealth
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -29,7 +30,10 @@ type tlsClientDoer struct {
 
 // newTLSClientBackend creates an HTTPDoer backed by bogdanfinn/tls-client.
 func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
-	profile := mapTLSProfile(cfg.Profile)
+	profile, err := mapTLSProfile(cfg.Profile)
+	if err != nil {
+		return nil, err
+	}
 
 	opts := []tls_client.HttpClientOption{
 		tls_client.WithTimeoutSeconds(cfg.TimeoutSeconds),
@@ -227,19 +231,27 @@ var profileMap = map[TLSProfile]profiles.ClientProfile{
 	ProfileChrome133:   profiles.Chrome_133,
 	ProfileChrome144:   profiles.Chrome_144,
 	ProfileChrome146:   profiles.Chrome_146,
+	ProfileChrome150:   profiles.Chrome_150,
+	ProfileChrome152:   profiles.Chrome_152,
 	ProfileFirefox133:  profiles.Firefox_133,
 	ProfileFirefox148:  profiles.Firefox_148,
 	ProfileBrave146:    profiles.Brave_146,
 	ProfileSafari16:    profiles.Safari_16_0,
 	ProfileSafariIOS18: profiles.Safari_IOS_18_0,
 	ProfileSafariIOS17: profiles.Safari_IOS_17_0,
+	ProfileSafariIOS26: profiles.Safari_IOS_26_0,
 }
 
-// mapTLSProfile converts a TLSProfile to a bogdanfinn ClientProfile.
-// Falls back to Chrome_131 for unmapped values.
-func mapTLSProfile(p TLSProfile) profiles.ClientProfile {
+// ErrUnknownTLSProfile is returned when a TLSProfile has no backend mapping.
+// An unmapped profile must never quietly become a different browser, so
+// client construction fails instead of substituting one.
+var ErrUnknownTLSProfile = errors.New("stealth: unknown TLS profile")
+
+// mapTLSProfile converts a TLSProfile to a bogdanfinn ClientProfile. It
+// returns ErrUnknownTLSProfile for a value with no mapping (including "").
+func mapTLSProfile(p TLSProfile) (profiles.ClientProfile, error) {
 	if mapped, ok := profileMap[p]; ok {
-		return mapped
+		return mapped, nil
 	}
-	return profiles.Chrome_131
+	return profiles.ClientProfile{}, fmt.Errorf("%w: %q", ErrUnknownTLSProfile, string(p))
 }

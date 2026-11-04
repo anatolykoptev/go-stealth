@@ -43,19 +43,12 @@ type clientConfig struct {
 
 func defaultConfig() *clientConfig {
 	return &clientConfig{
-		// The default profile stays ProfileChrome131, NOT the newest Chrome
-		// profile, on purpose. go-stealth's default profile is an implicit
-		// cross-repo contract: consumers that call NewClient() with no
-		// WithProfile pair this default JA3 with their OWN hardcoded
-		// User-Agent (e.g. go-twitter pins DefaultUserAgent to Chrome/131 and
-		// rides the bare default on its guest/pool path). Bumping the library
-		// default to a newer Chrome profile without bumping every consumer's
-		// hardcoded UA in lockstep produces a Chrome/<old> UA over a
-		// Chrome_<new> JA3 — the exact UA<->JA3 mismatch this package exists
-		// to eliminate. The newer Chrome profiles (144/146) remain available
-		// via explicit WithProfile; flip this default only in the same
-		// coordinated change that bumps every consumer's pinned UA.
-		profile:         ProfileChrome131,
+		// The default is the newest Chrome profile tls-client ships. A
+		// consumer that calls NewClient() with no WithProfile and pairs the
+		// default JA3 with its own hardcoded User-Agent must take the UA from
+		// Identity().UserAgent (or UserAgentForProfile) instead, or it will
+		// present an old Chrome UA over this newer fingerprint.
+		profile:         ProfileChrome152,
 		timeout:         20,
 		dialControl:     defaultDenyDial,
 		redirectGuard:   defaultDenyRedirect,

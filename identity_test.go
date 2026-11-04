@@ -7,7 +7,7 @@ import (
 
 // TestBrowserClient_Identity_Default asserts that a bare NewClient() (no
 // WithProfile / WithIdentity) exposes a self-consistent BrowserIdentity: the
-// TLS profile is the pinned default (ProfileChrome131), the User-Agent is
+// TLS profile is the pinned default (ProfileChrome152), the User-Agent is
 // resolved from BuiltinProfiles, the Chrome major in the UA equals the major
 // in the TLSProfile, and Client Hints are derived and carry the same major.
 func TestBrowserClient_Identity_Default(t *testing.T) {
@@ -16,8 +16,8 @@ func TestBrowserClient_Identity_Default(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := c.Identity()
-	if id.TLSProfile != ProfileChrome131 {
-		t.Fatalf("default Identity().TLSProfile = %q, want %q", id.TLSProfile, ProfileChrome131)
+	if id.TLSProfile != ProfileChrome152 {
+		t.Fatalf("default Identity().TLSProfile = %q, want %q", id.TLSProfile, ProfileChrome152)
 	}
 	if id.UserAgent == "" {
 		t.Fatal("default Identity().UserAgent empty — must resolve from BuiltinProfiles")
@@ -109,6 +109,7 @@ func TestBrowserClient_Identity_WithIdentityDerivesHints(t *testing.T) {
 func TestUserAgentForProfile_ChromeMajors(t *testing.T) {
 	chromeProfiles := []TLSProfile{
 		ProfileChrome131, ProfileChrome133, ProfileChrome144, ProfileChrome146,
+		ProfileChrome150, ProfileChrome152,
 	}
 	for _, p := range chromeProfiles {
 		ua := UserAgentForProfile(p)

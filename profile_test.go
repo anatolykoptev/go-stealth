@@ -269,19 +269,13 @@ func TestClientHintsHeaders_ChromeBrandConsistency(t *testing.T) {
 	}
 }
 
-// TestDefaultProfileIsChrome131 pins the library default TLS profile to
-// ProfileChrome131. The default is an implicit cross-repo contract: consumers
-// (e.g. go-twitter) pair the bare default JA3 with their own hardcoded
-// Chrome/131 User-Agent. Bumping the default to a newer Chrome profile without
-// bumping every consumer's UA in lockstep reintroduces the UA<->JA3 mismatch
-// this package exists to eliminate. This test fails if a future edit flips
-// the default blindly — see the comment at defaultConfig() in client_options.go.
-func TestDefaultProfileIsChrome131(t *testing.T) {
+// TestDefaultProfileIsCurrentChrome pins the library default to the newest
+// Chrome profile in BuiltinProfiles, so a stale default cannot linger when a
+// newer profile is added.
+func TestDefaultProfileIsCurrentChrome(t *testing.T) {
 	cfg := defaultConfig()
-	if cfg.profile != ProfileChrome131 {
-		t.Fatalf("defaultConfig().profile = %q, want %q (ProfileChrome131); "+
-			"see comment at defaultConfig — bumping the default requires bumping "+
-			"every consumer's hardcoded UA in lockstep", cfg.profile, ProfileChrome131)
+	if cfg.profile != ProfileChrome152 {
+		t.Fatalf("defaultConfig().profile = %q, want %q", cfg.profile, ProfileChrome152)
 	}
 }
 

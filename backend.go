@@ -11,12 +11,15 @@ const (
 	ProfileChrome133   TLSProfile = "chrome_133"
 	ProfileChrome144   TLSProfile = "chrome_144"
 	ProfileChrome146   TLSProfile = "chrome_146"
+	ProfileChrome150   TLSProfile = "chrome_150"
+	ProfileChrome152   TLSProfile = "chrome_152"
 	ProfileFirefox133  TLSProfile = "firefox_133"
 	ProfileFirefox148  TLSProfile = "firefox_148"
 	ProfileBrave146    TLSProfile = "brave_146"
 	ProfileSafari16    TLSProfile = "safari_16_0"
 	ProfileSafariIOS18 TLSProfile = "safari_ios_18_0"
 	ProfileSafariIOS17 TLSProfile = "safari_ios_17_0"
+	ProfileSafariIOS26 TLSProfile = "safari_ios_26_0"
 )
 
 // BackendConfig holds backend-agnostic configuration for creating an HTTPDoer.

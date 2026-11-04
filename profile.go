@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
@@ -53,136 +54,103 @@ func UserAgentForProfile(p TLSProfile) string {
 	return bp.UserAgent
 }
 
-// profileForTLS returns the first BuiltinProfiles entry whose TLSProfile
+// profileForTLS returns the first BuiltinProfiles (then legacy) entry whose TLSProfile
 // matches p, with ok=false when none match. Used by UserAgentForProfile and
 // by Identity() to resolve a full BrowserProfile (Browser/OS/Mobile included)
 // from a bare TLSProfile.
 func profileForTLS(p TLSProfile) (BrowserProfile, bool) {
-	for _, bp := range BuiltinProfiles {
-		if bp.TLSProfile == p {
-			return bp, true
+	for _, set := range [][]BrowserProfile{BuiltinProfiles, legacyProfiles} {
+		for _, bp := range set {
+			if bp.TLSProfile == p {
+				return bp, true
+			}
 		}
 	}
 	return BrowserProfile{}, false
 }
 
-// BuiltinProfiles provides browser fingerprint diversity across Chrome, Safari,
-// Firefox, and Edge with per-OS variants.
+// BuiltinProfiles is the set of current browser request profiles, with per-OS
+// variants. Every entry describes ONE browser: the TLS profile major, the
+// User-Agent major and the Client Hints derived from it agree (pinned by
+// TestBuiltinProfilesCoherent). RandomProfile and PlatformMatchedProfile draw
+// only from this set; the legacy set below stays reachable through
+// UserAgentForProfile / Identity() for callers that pin an older profile.
+//
+// The newest Chrome here is bounded by the newest profile tls-client ships,
+// not by the current Chrome release: a UA newer than the TLS profile would
+// describe two different browsers.
 var BuiltinProfiles = []BrowserProfile{
-	// Chrome — Windows
+	// Chrome 152 (default) — Windows first: profileForTLS returns the first match.
 	{
-		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "windows",
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome152, Browser: "chrome", OS: "windows",
 	},
 	{
-		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "windows",
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome152, Browser: "chrome", OS: "macos",
 	},
 	{
-		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "windows",
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome152, Browser: "chrome", OS: "linux",
 	},
+	{
+		UserAgent:  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
+		TLSProfile: ProfileChrome152, Browser: "chrome", OS: "android", Mobile: true,
+	},
+	// Chrome 150
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome150, Browser: "chrome", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome150, Browser: "chrome", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome150, Browser: "chrome", OS: "linux",
+	},
+	// Chrome 146
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "windows",
-	},
-	// Chrome — macOS
-	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "macos",
-	},
-	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "macos",
-	},
-	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "macos",
 	},
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "macos",
 	},
-	// Chrome — Linux
-	{
-		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "linux",
-	},
-	{
-		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "linux",
-	},
-	{
-		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
-		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "linux",
-	},
 	{
 		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "linux",
 	},
-	// Chrome — Android
 	{
-		UserAgent:  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "android", Mobile: true,
-	},
-	{
-		UserAgent:  "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36",
+		UserAgent:  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36",
 		TLSProfile: ProfileChrome146, Browser: "chrome", OS: "android", Mobile: true,
 	},
 
-	// Safari — macOS
+	// Safari — iOS 26 (Safari freezes the OS token in the UA string).
 	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
-		TLSProfile: ProfileSafari16, Browser: "safari", OS: "macos",
-	},
-	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
-		TLSProfile: ProfileSafari16, Browser: "safari", OS: "macos",
-	},
-	// Safari — iOS
-	{
-		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
-		TLSProfile: ProfileSafariIOS18, Browser: "safari", OS: "ios", Mobile: true,
-	},
-	{
-		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-		TLSProfile: ProfileSafariIOS17, Browser: "safari", OS: "ios", Mobile: true,
+		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
+		TLSProfile: ProfileSafariIOS26, Browser: "safari", OS: "ios", Mobile: true,
 	},
 
-	// Firefox — Windows
-	{
-		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "windows",
-	},
-	// Firefox — macOS
-	{
-		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "macos",
-	},
-	// Firefox — Linux
-	{
-		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
-		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "linux",
-	},
-	// Firefox 148 — Windows
+	// Firefox 148
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0",
 		TLSProfile: ProfileFirefox148, Browser: "firefox", OS: "windows",
 	},
-	// Firefox 148 — macOS
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:148.0) Gecko/20100101 Firefox/148.0",
 		TLSProfile: ProfileFirefox148, Browser: "firefox", OS: "macos",
 	},
-	// Firefox 148 — Linux
 	{
 		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
 		TLSProfile: ProfileFirefox148, Browser: "firefox", OS: "linux",
 	},
 
-	// Brave 146 — Windows.
+	// Brave 146.
 	// Brave deliberately does NOT identify itself in the User-Agent: it sends
-	// a stock Chromium/Chrome UA on every platform. So a correct entry pairs
+	// a stock Chrome UA on every platform. So a correct entry pairs
 	// brave_146 with a Chrome/146 UA, which looks wrong but is what real Brave
 	// emits. Do NOT "fix" this to a Brave-branded UA — none exists. The
 	// distinguishing signal is the TLS fingerprint (Brave_146 sets
@@ -191,26 +159,106 @@ var BuiltinProfiles = []BrowserProfile{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		TLSProfile: ProfileBrave146, Browser: "brave", OS: "windows",
 	},
-	// Brave 146 — macOS (Chrome/146 UA, see Windows entry rationale).
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		TLSProfile: ProfileBrave146, Browser: "brave", OS: "macos",
 	},
-	// Brave 146 — Linux (Chrome/146 UA, see Windows entry rationale).
 	{
 		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		TLSProfile: ProfileBrave146, Browser: "brave", OS: "linux",
 	},
 
-	// Edge — Windows (uses Chrome TLS fingerprint — same Chromium engine)
+	// Edge 152 (Chromium engine, same TLS profile as Chrome 152).
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0",
+		TLSProfile: ProfileChrome152, Browser: "edge", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0",
+		TLSProfile: ProfileChrome152, Browser: "edge", OS: "macos",
+	},
+}
+
+// legacyProfiles are coherent but older browser profiles. They are not drawn
+// by RandomProfile; they remain resolvable so a caller that explicitly pins
+// one of these TLS profiles still gets a matching User-Agent.
+var legacyProfiles = []BrowserProfile{
+	// Chrome 144, 133, 131
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome144, Browser: "chrome", OS: "linux",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome133, Browser: "chrome", OS: "linux",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "linux",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+		TLSProfile: ProfileChrome131, Browser: "chrome", OS: "android", Mobile: true,
+	},
+	// Edge 131
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
 		TLSProfile: ProfileChrome131, Browser: "edge", OS: "windows",
 	},
-	// Edge — macOS
 	{
 		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
 		TLSProfile: ProfileChrome131, Browser: "edge", OS: "macos",
+	},
+	// Safari — macOS (the newest macOS Safari profile tls-client ships is 16.0)
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15",
+		TLSProfile: ProfileSafari16, Browser: "safari", OS: "macos",
+	},
+	// Safari — iOS 18 / 17
+	{
+		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+		TLSProfile: ProfileSafariIOS18, Browser: "safari", OS: "ios", Mobile: true,
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+		TLSProfile: ProfileSafariIOS17, Browser: "safari", OS: "ios", Mobile: true,
+	},
+	// Firefox 133
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:133.0) Gecko/20100101 Firefox/133.0",
+		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "macos",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+		TLSProfile: ProfileFirefox133, Browser: "firefox", OS: "linux",
 	},
 }
 
@@ -294,11 +342,13 @@ func PlatformMatchedProfile() BrowserProfile {
 // ClientHintsHeaders returns sec-ch-ua-* headers for Chromium-based UAs.
 // Returns nil for Safari/Firefox (they don't send Client Hints).
 //
-// The sec-ch-ua brand list is derived from the UA's Chrome major so the
-// client-hint brands agree with the User-Agent (and the TLS profile): a real
-// Chrome sends THREE brands — a GREASE brand, "Chromium";v="<major>", and
-// "Google Chrome";v="<major>". Edge replaces "Google Chrome" with
-// "Microsoft Edge";v="<edge major>".
+// The sec-ch-ua brand list is built the way Chromium builds it
+// (components/embedder_support/user_agent_utils.cc, GenerateBrandVersionList):
+// a GREASE brand, "Chromium" and the browser brand ("Google Chrome", or
+// "Microsoft Edge" for Edge), each carrying the major version, shuffled by a
+// permutation seeded with the Chromium major. Both the GREASE brand/version
+// and the order therefore change with the major; a fixed brand string agrees
+// with at most one release.
 func ClientHintsHeaders(ua string) map[string]string {
 	if !strings.Contains(ua, "Chrome/") {
 		return nil
@@ -310,23 +360,39 @@ func ClientHintsHeaders(ua string) map[string]string {
 		mobile = "?1"
 	}
 
-	const greaseBrand = `"Not_A Brand";v="24"`
-
-	var secChUa string
+	brand, brandVersion := "Google Chrome", version
 	if strings.Contains(ua, "Edg/") {
-		edgeVersion := extractEdgeVersion(ua)
-		secChUa = fmt.Sprintf(`%s, "Chromium";v="%s", "Microsoft Edge";v="%s"`, greaseBrand, version, edgeVersion)
-	} else {
-		secChUa = fmt.Sprintf(`%s, "Chromium";v="%s", "Google Chrome";v="%s"`, greaseBrand, version, version)
+		brand, brandVersion = "Microsoft Edge", extractEdgeVersion(ua)
 	}
 
-	hints := map[string]string{
-		"sec-ch-ua":          secChUa,
+	return map[string]string{
+		"sec-ch-ua":          secChUa(version, brand, brandVersion),
 		"sec-ch-ua-mobile":   mobile,
 		"sec-ch-ua-platform": fmt.Sprintf(`"%s"`, platform),
 	}
+}
 
-	return hints
+// secChUa renders the sec-ch-ua value for a Chromium major, mirroring
+// Chromium's GetGreasedUserAgentBrandVersion + GetRandomOrder(3).
+func secChUa(major, brand, brandVersion string) string {
+	seed, err := strconv.Atoi(major)
+	if err != nil || seed < 0 {
+		seed = 0
+	}
+	greaseChars := [...]string{" ", "(", ":", "-", ".", "/", ")", ";", "=", "?", "_"}
+	greaseVersions := [...]string{"8", "99", "24"}
+	orders := [6][3]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
+
+	entries := [3]string{
+		fmt.Sprintf(`"Not%sA%sBrand";v="%s"`, greaseChars[seed%len(greaseChars)], greaseChars[(seed+1)%len(greaseChars)], greaseVersions[seed%len(greaseVersions)]),
+		fmt.Sprintf(`"Chromium";v="%s"`, major),
+		fmt.Sprintf(`"%s";v="%s"`, brand, brandVersion),
+	}
+	var out [3]string
+	for i, pos := range orders[seed%len(orders)] {
+		out[pos] = entries[i]
+	}
+	return strings.Join(out[:], ", ")
 }
 
 // ExtractChromeVersion extracts the major Chrome version from a User-Agent string.

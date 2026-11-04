@@ -1,6 +1,7 @@
 package stealth
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -207,11 +208,15 @@ func TestTLSProfileConstants(t *testing.T) {
 	profiles := []TLSProfile{
 		ProfileChrome131, ProfileChrome133,
 		ProfileChrome144, ProfileChrome146,
-		ProfileFirefox133,
-		ProfileSafari16, ProfileSafariIOS18, ProfileSafariIOS17,
+		ProfileChrome150, ProfileChrome152,
+		ProfileFirefox133, ProfileFirefox148, ProfileBrave146,
+		ProfileSafari16, ProfileSafariIOS18, ProfileSafariIOS17, ProfileSafariIOS26,
 	}
 	for _, p := range profiles {
-		mapped := mapTLSProfile(p)
+		mapped, err := mapTLSProfile(p)
+		if err != nil {
+			t.Fatalf("mapTLSProfile(%s): %v", p, err)
+		}
 		if mapped.GetClientHelloStr() == "" {
 			t.Errorf("profile %s mapped to empty client hello", p)
 		}
@@ -229,9 +234,14 @@ func TestTLSProfile_NewChromeMapsToCorrectBogdanfinnProfile(t *testing.T) {
 	}{
 		{ProfileChrome144, "144"},
 		{ProfileChrome146, "146"},
+		{ProfileChrome150, "150"},
+		{ProfileChrome152, "152"},
 	}
 	for _, tt := range tests {
-		mapped := mapTLSProfile(tt.goStealthProfile)
+		mapped, err := mapTLSProfile(tt.goStealthProfile)
+		if err != nil {
+			t.Fatalf("mapTLSProfile(%s): %v", tt.goStealthProfile, err)
+		}
 		got := mapped.GetClientHelloStr()
 		// bogdanfinn encodes the version in the ClientHello "Version" field,
 		// surfaced via GetClientHelloStr as "Chrome/<version>".
@@ -242,12 +252,20 @@ func TestTLSProfile_NewChromeMapsToCorrectBogdanfinnProfile(t *testing.T) {
 	}
 }
 
-func TestTLSProfileFallback(t *testing.T) {
-	// Unknown profile should fall back to Chrome_131
-	mapped := mapTLSProfile("unknown_profile")
-	defaultMapped := mapTLSProfile(ProfileChrome131)
-	if mapped.GetClientHelloStr() != defaultMapped.GetClientHelloStr() {
-		t.Fatalf("expected fallback to Chrome_131")
+// TestUnmappedTLSProfileFailsLoudly: an unmapped TLSProfile (or "") must be an
+// error, never a silent substitution of another browser (it used to become
+// Chrome_131).
+func TestUnmappedTLSProfileFailsLoudly(t *testing.T) {
+	for _, p := range []TLSProfile{"unknown_profile", ""} {
+		if _, err := mapTLSProfile(p); !errors.Is(err, ErrUnknownTLSProfile) {
+			t.Errorf("mapTLSProfile(%q) err = %v, want ErrUnknownTLSProfile", p, err)
+		}
+		if _, err := newTLSClientBackend(BackendConfig{Profile: p, TimeoutSeconds: 5}); !errors.Is(err, ErrUnknownTLSProfile) {
+			t.Errorf("newTLSClientBackend(%q) err = %v, want ErrUnknownTLSProfile", p, err)
+		}
+	}
+	if _, err := NewClient(WithProfile("unknown_profile"), WithoutSSRFGuard()); !errors.Is(err, ErrUnknownTLSProfile) {
+		t.Errorf("NewClient(unknown profile) err = %v, want ErrUnknownTLSProfile", err)
 	}
 }
 
