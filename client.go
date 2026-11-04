@@ -40,6 +40,36 @@ var DefaultHeaderOrder = []string{
 	"cookie",
 }
 
+// FirefoxHeaderOrder is the Firefox request-header order on a top-level GET
+// navigation over HTTP/2, as observed from a real Firefox. cookie was
+// captured between accept-encoding and upgrade-insecure-requests; referer is
+// placed just before it (its position was not captured).
+var FirefoxHeaderOrder = []string{
+	"user-agent",
+	"accept",
+	"accept-language",
+	"accept-encoding",
+	"referer",
+	"cookie",
+	"upgrade-insecure-requests",
+	"sec-fetch-dest",
+	"sec-fetch-mode",
+	"sec-fetch-site",
+	"sec-fetch-user",
+	"priority",
+	"te",
+}
+
+// DefaultHeaderOrderFor returns the request-header order that matches the
+// given BrowserProfile.Browser value: Firefox gets its own order, every other
+// browser the Chrome order (the order for Safari has not been captured).
+func DefaultHeaderOrderFor(browser string) []string {
+	if browser == "firefox" {
+		return FirefoxHeaderOrder
+	}
+	return DefaultHeaderOrder
+}
+
 // BrowserClient wraps an HTTPDoer backend with middleware, proxy rotation,
 // and TLS fingerprint impersonation.
 type BrowserClient struct {
@@ -116,7 +146,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 
 	order := cfg.headerOrder
 	if order == nil {
-		order = DefaultHeaderOrder
+		order = DefaultHeaderOrderFor(resolveIdentity(cfg).Browser)
 	}
 
 	// The client owns every doer it builds itself (the default tls-client

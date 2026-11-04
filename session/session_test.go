@@ -3,6 +3,8 @@ package session
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -194,5 +196,36 @@ func TestSession_UniqueIDs(t *testing.T) {
 	s2, _ := New(WithClientOptions(stealth.WithoutSSRFGuard()))
 	if s1.ID == s2.ID {
 		t.Fatal("sessions should have unique IDs")
+	}
+}
+
+// TestNew_BlankProfileUsesDefault: a zero-value BrowserProfile (or a saved
+// session whose profile is blank) means "no preference", not a construction
+// error.
+func TestNew_BlankProfileUsesDefault(t *testing.T) {
+	s, err := New(WithProfile(stealth.BrowserProfile{}))
+	if err != nil {
+		t.Fatalf("New(blank profile): %v", err)
+	}
+	if s.Profile().TLSProfile == "" || s.Profile().UserAgent == "" {
+		t.Fatalf("blank profile not replaced by a complete one: %+v", s.Profile())
+	}
+}
+
+func TestFileStore_LoadBlankSavedProfile(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "blank.json"), []byte(`{"id":"blank","profile":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := store.Load("blank")
+	if err != nil {
+		t.Fatalf("Load of a session with a blank saved profile: %v", err)
+	}
+	if s.Profile().TLSProfile == "" {
+		t.Fatal("loaded session has an empty TLS profile")
 	}
 }

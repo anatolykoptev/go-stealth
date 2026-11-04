@@ -138,11 +138,23 @@ func TestRandomProfile_EdgeWindows(t *testing.T) {
 	}
 }
 
-func TestRandomProfile_FallbackOnNoMatch(t *testing.T) {
-	// Non-existent combo should fallback
-	p := RandomProfile(WithOS("freebsd"))
-	if p.UserAgent == "" {
-		t.Fatal("expected fallback profile")
+// TestRandomProfile_NoMatchNeverChangesBrowser: filters nothing satisfies must
+// not fall back to an arbitrary profile (macos+safari used to yield Firefox).
+func TestRandomProfile_NoMatchNeverChangesBrowser(t *testing.T) {
+	// Browser filter kept, OS relaxed: Safari is only built in for iOS.
+	for i := 0; i < 50; i++ {
+		p := RandomProfile(WithBrowser("safari"), WithOS("macos"))
+		if p.Browser != "safari" {
+			t.Fatalf("WithBrowser(safari)+WithOS(macos) returned browser %q (%s)", p.Browser, p.UserAgent)
+		}
+	}
+	// No browser to keep: the zero value, detectable by the empty UserAgent.
+	if p := RandomProfile(WithOS("freebsd")); p.UserAgent != "" || p.TLSProfile != "" {
+		t.Fatalf("RandomProfile(freebsd) = %+v, want the zero BrowserProfile", p)
+	}
+	// Unknown browser: zero value too.
+	if p := RandomProfile(WithBrowser("netscape")); p.UserAgent != "" {
+		t.Fatalf("RandomProfile(netscape) = %+v, want the zero BrowserProfile", p)
 	}
 }
 
@@ -269,19 +281,13 @@ func TestClientHintsHeaders_ChromeBrandConsistency(t *testing.T) {
 	}
 }
 
-// TestDefaultProfileIsChrome131 pins the library default TLS profile to
-// ProfileChrome131. The default is an implicit cross-repo contract: consumers
-// (e.g. go-twitter) pair the bare default JA3 with their own hardcoded
-// Chrome/131 User-Agent. Bumping the default to a newer Chrome profile without
-// bumping every consumer's UA in lockstep reintroduces the UA<->JA3 mismatch
-// this package exists to eliminate. This test fails if a future edit flips
-// the default blindly — see the comment at defaultConfig() in client_options.go.
-func TestDefaultProfileIsChrome131(t *testing.T) {
+// TestDefaultProfileIsCurrentChrome pins the library default to the newest
+// Chrome profile in BuiltinProfiles, so a stale default cannot linger when a
+// newer profile is added.
+func TestDefaultProfileIsCurrentChrome(t *testing.T) {
 	cfg := defaultConfig()
-	if cfg.profile != ProfileChrome131 {
-		t.Fatalf("defaultConfig().profile = %q, want %q (ProfileChrome131); "+
-			"see comment at defaultConfig — bumping the default requires bumping "+
-			"every consumer's hardcoded UA in lockstep", cfg.profile, ProfileChrome131)
+	if cfg.profile != ProfileChrome152 {
+		t.Fatalf("defaultConfig().profile = %q, want %q", cfg.profile, ProfileChrome152)
 	}
 }
 

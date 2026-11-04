@@ -1,6 +1,7 @@
 package stealth
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -207,11 +208,15 @@ func TestTLSProfileConstants(t *testing.T) {
 	profiles := []TLSProfile{
 		ProfileChrome131, ProfileChrome133,
 		ProfileChrome144, ProfileChrome146,
-		ProfileFirefox133,
-		ProfileSafari16, ProfileSafariIOS18, ProfileSafariIOS17,
+		ProfileChrome150, ProfileChrome152,
+		ProfileFirefox133, ProfileFirefox148, ProfileBrave146,
+		ProfileSafari16, ProfileSafariIOS18, ProfileSafariIOS17, ProfileSafariIOS26,
 	}
 	for _, p := range profiles {
-		mapped := mapTLSProfile(p)
+		mapped, err := mapTLSProfile(p)
+		if err != nil {
+			t.Fatalf("mapTLSProfile(%s): %v", p, err)
+		}
 		if mapped.GetClientHelloStr() == "" {
 			t.Errorf("profile %s mapped to empty client hello", p)
 		}
@@ -229,9 +234,14 @@ func TestTLSProfile_NewChromeMapsToCorrectBogdanfinnProfile(t *testing.T) {
 	}{
 		{ProfileChrome144, "144"},
 		{ProfileChrome146, "146"},
+		{ProfileChrome150, "150"},
+		{ProfileChrome152, "152"},
 	}
 	for _, tt := range tests {
-		mapped := mapTLSProfile(tt.goStealthProfile)
+		mapped, err := mapTLSProfile(tt.goStealthProfile)
+		if err != nil {
+			t.Fatalf("mapTLSProfile(%s): %v", tt.goStealthProfile, err)
+		}
 		got := mapped.GetClientHelloStr()
 		// bogdanfinn encodes the version in the ClientHello "Version" field,
 		// surfaced via GetClientHelloStr as "Chrome/<version>".
@@ -242,12 +252,41 @@ func TestTLSProfile_NewChromeMapsToCorrectBogdanfinnProfile(t *testing.T) {
 	}
 }
 
-func TestTLSProfileFallback(t *testing.T) {
-	// Unknown profile should fall back to Chrome_131
-	mapped := mapTLSProfile("unknown_profile")
-	defaultMapped := mapTLSProfile(ProfileChrome131)
-	if mapped.GetClientHelloStr() != defaultMapped.GetClientHelloStr() {
-		t.Fatalf("expected fallback to Chrome_131")
+// TestUnmappedTLSProfileFailsLoudly: a non-empty TLSProfile with no mapping
+// must be an error, never a silent substitution of another browser (it used to
+// become Chrome_131). The zero value "" is not a name: it means "use the
+// default" and is resolved before the backend is reached.
+func TestUnmappedTLSProfileFailsLoudly(t *testing.T) {
+	const invented TLSProfile = "unknown_profile"
+	if _, err := mapTLSProfile(invented); !errors.Is(err, ErrUnknownTLSProfile) {
+		t.Errorf("mapTLSProfile(%q) err = %v, want ErrUnknownTLSProfile", invented, err)
+	}
+	if _, err := newTLSClientBackend(BackendConfig{Profile: invented, TimeoutSeconds: 5}); !errors.Is(err, ErrUnknownTLSProfile) {
+		t.Errorf("newTLSClientBackend(%q) err = %v, want ErrUnknownTLSProfile", invented, err)
+	}
+	if _, err := NewClient(WithProfile(invented), WithoutSSRFGuard()); !errors.Is(err, ErrUnknownTLSProfile) {
+		t.Errorf("NewClient(invented profile) err = %v, want ErrUnknownTLSProfile", err)
+	}
+}
+
+// TestEmptyTLSProfileMeansDefault: consumers pass the zero value for "no
+// preference" (struct-literal accounts, blank saved sessions); that must give
+// the default profile, not a construction error.
+func TestEmptyTLSProfileMeansDefault(t *testing.T) {
+	for name, opts := range map[string][]ClientOption{
+		"WithProfile":  {WithProfile("")},
+		"WithIdentity": {WithIdentity(BrowserIdentity{})},
+	} {
+		c, err := NewClient(append(opts, WithoutSSRFGuard())...)
+		if err != nil {
+			t.Fatalf("%s(\"\"): NewClient error: %v", name, err)
+		}
+		if got := c.Identity().TLSProfile; got == "" && name == "WithProfile" {
+			t.Errorf("%s(\"\"): identity profile empty, want the default", name)
+		}
+		if name == "WithProfile" && c.Identity().TLSProfile != ProfileChrome152 {
+			t.Errorf("%s(\"\"): profile %q, want default %q", name, c.Identity().TLSProfile, ProfileChrome152)
+		}
 	}
 }
 
