@@ -50,6 +50,7 @@ func (p h2Priority) Weight() int { return int(p.Wire) + 1 }
 type wireCapture struct {
 	Ciphers      []uint16 // GREASE normalised to 0x0a0a
 	Extensions   []uint16 // GREASE normalised to 0x0a0a, wire order
+	ExtData      map[uint16][]byte
 	Settings     [][2]uint32
 	WindowUpdate uint32
 	Priority     *h2Priority
@@ -112,51 +113,53 @@ func selfSignedCert(t *testing.T) tls.Certificate {
 
 // parseClientHello extracts cipher suites and extension IDs (wire order) from
 // the first TLS record in raw.
-func parseClientHello(raw []byte) (ciphers, exts []uint16, err error) {
+func parseClientHello(raw []byte) (ciphers, exts []uint16, data map[uint16][]byte, err error) {
+	data = map[uint16][]byte{}
 	bad := fmt.Errorf("malformed ClientHello (%d bytes)", len(raw))
 	if len(raw) < 5+4+2+32+1 || raw[0] != 0x16 || raw[5] != 0x01 {
-		return nil, nil, bad
+		return nil, nil, nil, bad
 	}
 	p := raw[5+4:]
 	p = p[2+32:] // version, random
 	if len(p) < 1 || len(p) < 1+int(p[0]) {
-		return nil, nil, bad
+		return nil, nil, nil, bad
 	}
 	p = p[1+int(p[0]):] // session id
 	if len(p) < 2 {
-		return nil, nil, bad
+		return nil, nil, nil, bad
 	}
 	cl := int(binary.BigEndian.Uint16(p))
 	if len(p) < 2+cl {
-		return nil, nil, bad
+		return nil, nil, nil, bad
 	}
 	for i := 0; i+1 < cl; i += 2 {
 		ciphers = append(ciphers, norm(binary.BigEndian.Uint16(p[2+i:])))
 	}
 	p = p[2+cl:]
 	if len(p) < 1 || len(p) < 1+int(p[0]) {
-		return nil, nil, bad
+		return nil, nil, nil, bad
 	}
 	p = p[1+int(p[0]):] // compression
 	if len(p) < 2 {
-		return nil, nil, bad
+		return nil, nil, nil, bad
 	}
 	el := int(binary.BigEndian.Uint16(p))
 	p = p[2:]
 	if len(p) < el {
-		return nil, nil, bad
+		return nil, nil, nil, bad
 	}
 	p = p[:el]
 	for len(p) >= 4 {
 		id := binary.BigEndian.Uint16(p)
 		l := int(binary.BigEndian.Uint16(p[2:]))
 		if len(p) < 4+l {
-			return nil, nil, bad
+			return nil, nil, nil, bad
 		}
 		exts = append(exts, norm(id))
+		data[norm(id)] = append([]byte(nil), p[4:4+l]...)
 		p = p[4+l:]
 	}
-	return ciphers, exts, nil
+	return ciphers, exts, data, nil
 }
 
 // readH2 reads the client preface and frames up to and including the first
@@ -209,7 +212,7 @@ func captureWire(t *testing.T, opts ...ClientOption) wireCapture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	cfg := &tls.Config{Certificates: []tls.Certificate{selfSignedCert(t)}, NextProtos: []string{"h2"}}
 
 	type result struct {
@@ -223,7 +226,7 @@ func captureWire(t *testing.T, opts ...ClientOption) wireCapture {
 			done <- result{err: err}
 			return
 		}
-		defer raw.Close()
+		defer func() { _ = raw.Close() }()
 		_ = raw.SetDeadline(time.Now().Add(10 * time.Second))
 		rec := &recordingConn{Conn: raw}
 		conn := tls.Server(rec, cfg)
@@ -232,7 +235,7 @@ func captureWire(t *testing.T, opts ...ClientOption) wireCapture {
 			return
 		}
 		var w wireCapture
-		w.Ciphers, w.Extensions, err = parseClientHello(rec.recorded())
+		w.Ciphers, w.Extensions, w.ExtData, err = parseClientHello(rec.recorded())
 		if err != nil {
 			done <- result{err: err}
 			return
@@ -247,7 +250,7 @@ func captureWire(t *testing.T, opts ...ClientOption) wireCapture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bc.Close()
+	defer func() { _ = bc.Close() }()
 	port := ln.Addr().(*net.TCPAddr).Port
 	// The server closes after the first HEADERS frame, so Do fails; only the
 	// captured bytes matter.
@@ -270,4 +273,28 @@ func sameU16(a, b []uint16) bool {
 		}
 	}
 	return true
+}
+
+// payloadHex renders the payload of extension id as hex, with GREASE values
+// inside the u16 lists of supported_groups (0x0a) and supported_versions
+// (0x2b) normalised, so the string is the same on every connection. It covers
+// the extensions whose payload is deterministic (key_share, ECH and the trust
+// anchors carry per-connection randomness and are not included).
+func payloadHex(w wireCapture, id uint16) string {
+	d, ok := w.ExtData[id]
+	if !ok {
+		return "absent"
+	}
+	d = append([]byte(nil), d...)
+	switch id {
+	case 0x0a: // u16 length, then u16 groups
+		for i := 2; i+1 < len(d); i += 2 {
+			binary.BigEndian.PutUint16(d[i:], norm(binary.BigEndian.Uint16(d[i:])))
+		}
+	case 0x2b: // u8 length, then u16 versions
+		for i := 1; i+1 < len(d); i += 2 {
+			binary.BigEndian.PutUint16(d[i:], norm(binary.BigEndian.Uint16(d[i:])))
+		}
+	}
+	return fmt.Sprintf("%x", d)
 }

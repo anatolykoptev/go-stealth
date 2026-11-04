@@ -80,7 +80,7 @@ func TestChrome156_Chrome152StaysResolvable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bc.Close()
+	t.Cleanup(func() { _ = bc.Close() })
 	if id := bc.Identity(); id.TLSProfile != ProfileChrome152 || !strings.Contains(id.UserAgent, "Chrome/152.") {
 		t.Fatalf("chrome_152 identity = %s / %s", id.TLSProfile, id.UserAgent)
 	}
@@ -96,7 +96,7 @@ func TestChrome156_IsTheDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bc.Close()
+	t.Cleanup(func() { _ = bc.Close() })
 	id := bc.Identity()
 	if id.TLSProfile != ProfileChrome156 || !strings.Contains(id.UserAgent, "Chrome/156.") {
 		t.Fatalf("default identity = %s / %s, want chrome_156 / Chrome/156", id.TLSProfile, id.UserAgent)

@@ -30,10 +30,78 @@ func TestWire_Chrome131Frozen(t *testing.T) {
 	if !slices.Equal(w.Settings, wantSettings) {
 		t.Errorf("HTTP/2 SETTINGS moved: got %v want %v", w.Settings, wantSettings)
 	}
+	// Deterministic extension payloads, GREASE normalised: signature
+	// algorithms, groups, ALPN, ALPS (old codepoint), versions, certificate
+	// compression, PSK modes, point formats and the empty-bodied extensions.
+	wantPayloads := map[uint16]string{
+		0x0d:   "001004030804040105030805050108060601",
+		0x0a:   "000a0a0a11ec001d00170018",
+		0x10:   "000c02683208687474702f312e31",
+		0x4469: "0003026832",
+		0x2b:   "060a0a03040303",
+		0x1b:   "020002",
+		0x2d:   "0101",
+		0x0b:   "0100",
+		0x05:   "0100000000",
+		0xff01: "00",
+		0x12:   "",
+		0x17:   "",
+		0x23:   "",
+	}
+	for id, want := range wantPayloads {
+		if got := payloadHex(w, id); got != want {
+			t.Errorf("extension %#x payload moved: got %q want %q", id, got, want)
+		}
+	}
 	if w.WindowUpdate != 15663105 {
 		t.Errorf("WINDOW_UPDATE = %d, want 15663105", w.WindowUpdate)
 	}
 	if w.Priority == nil || *w.Priority != (h2Priority{Exclusive: true, DependsOn: 0, Wire: 255}) {
 		t.Errorf("HEADERS priority = %+v, want exclusive dep 0 weight 256", w.Priority)
+	}
+}
+
+// The headers a chrome_131 client sends by default are part of the frozen
+// wire too: the navigation set and the header order.
+func TestChrome131Frozen_DefaultHeaders(t *testing.T) {
+	bp, ok := profileForTLS(ProfileChrome131)
+	if !ok {
+		t.Fatal("chrome_131 not resolvable")
+	}
+	want := map[string]string{
+		"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		"accept-encoding":           "gzip, deflate, br, zstd",
+		"accept-language":           "en-US,en;q=0.9",
+		"priority":                  "u=0, i",
+		"sec-ch-ua":                 `"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"`,
+		"sec-ch-ua-mobile":          "?0",
+		"sec-ch-ua-platform":        `"Windows"`,
+		"sec-fetch-dest":            "document",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-site":            "none",
+		"sec-fetch-user":            "?1",
+		"upgrade-insecure-requests": "1",
+		"user-agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+	}
+	got := ChromeHeadersFor(bp)
+	if len(got) != len(want) {
+		t.Errorf("header set changed: got %d headers, want %d: %v", len(got), len(want), got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("header %s = %q, want %q", k, got[k], v)
+		}
+	}
+
+	wantOrder := []string{
+		"sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform", "accept-language", "upgrade-insecure-requests",
+		"user-agent", "accept", "sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest",
+		"accept-encoding", "priority", "referer", "cookie",
+	}
+	if order := orderOf(t, WithProfile(ProfileChrome131)); !slices.Equal(order, wantOrder) {
+		t.Errorf("chrome_131 client header order moved:\n got  %v\n want %v", order, wantOrder)
+	}
+	if !slices.Equal(DefaultHeaderOrder, wantOrder) {
+		t.Errorf("DefaultHeaderOrder moved: %v", DefaultHeaderOrder)
 	}
 }

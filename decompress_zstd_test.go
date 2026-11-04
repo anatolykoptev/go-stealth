@@ -16,7 +16,7 @@ func zstdEncode(t *testing.T, plain []byte) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer enc.Close()
+	defer func() { _ = enc.Close() }()
 	return enc.EncodeAll(plain, nil)
 }
 
@@ -34,6 +34,21 @@ func TestDecompressBody_Zstd(t *testing.T) {
 	// Header stripped by an intermediary: the zstd frame magic is enough.
 	if got, _ := decompressBody(packed, ""); !bytes.Equal(got, plain) {
 		t.Errorf("no content-encoding: zstd frame not recognised by its magic bytes (%d bytes)", len(got))
+	}
+}
+
+// A zstd stream may open with a skippable frame (RFC 8878 section 3.1.2), so
+// its first bytes are not the usual frame magic. Only the content-encoding
+// header identifies such a body; this keeps that path from being redundant
+// with the magic-byte fallback.
+func TestDecompressBody_ZstdSkippableFrameFirst(t *testing.T) {
+	plain := []byte(strings.Repeat("after a skippable frame ", 50))
+	skippable := []byte{0x50, 0x2a, 0x4d, 0x18, 3, 0, 0, 0, 'x', 'y', 'z'}
+	stream := append(skippable, zstdEncode(t, plain)...)
+
+	got, err := decompressBody(stream, "zstd")
+	if err != nil || !bytes.Equal(got, plain) {
+		t.Fatalf("with content-encoding zstd: got %d bytes, err=%v; want the %d-byte original", len(got), err, len(plain))
 	}
 }
 
@@ -65,7 +80,7 @@ func TestBackends_DecodeZstdResponse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer bc.Close()
+			t.Cleanup(func() { _ = bc.Close() })
 			hdr := map[string]string{"accept-encoding": "gzip, deflate, br, zstd"}
 			body, _, status, err := bc.Do("GET", srv.URL, hdr, nil)
 			if err != nil || status != 200 {
