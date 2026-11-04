@@ -56,7 +56,7 @@ func New(opts ...Option) (*Session, error) {
 	}
 
 	var profile stealth.BrowserProfile
-	if cfg.profile != nil {
+	if cfg.profile != nil && cfg.profile.TLSProfile != "" {
 		profile = *cfg.profile
 	} else {
 		profile = stealth.PlatformMatchedProfile()

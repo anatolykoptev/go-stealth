@@ -295,29 +295,43 @@ func WithMobile(mobile bool) ProfileOption {
 }
 
 // RandomProfile returns a random BrowserProfile matching the given filters.
-// With no options, returns any profile. Returns a fallback if no profiles match.
+// With no options, returns any profile.
+//
+// When no profile satisfies every filter it never substitutes an unrelated
+// browser: if a browser filter was given, the OS and mobile filters are
+// relaxed (the browser is kept, e.g. WithBrowser("safari")+WithOS("macos")
+// yields an iOS Safari profile); if that still matches nothing, or no browser
+// filter was given, it returns the zero BrowserProfile, whose UserAgent is "".
+// Callers that filter must check for that.
 func RandomProfile(opts ...ProfileOption) BrowserProfile {
 	var f profileFilter
 	for _, o := range opts {
 		o(&f)
 	}
 
-	var candidates []BrowserProfile
-	for _, p := range BuiltinProfiles {
-		if f.os != "" && p.OS != f.os {
-			continue
+	pick := func(f profileFilter) []BrowserProfile {
+		var candidates []BrowserProfile
+		for _, p := range BuiltinProfiles {
+			if f.os != "" && p.OS != f.os {
+				continue
+			}
+			if f.browser != "" && p.Browser != f.browser {
+				continue
+			}
+			if f.mobile != nil && p.Mobile != *f.mobile {
+				continue
+			}
+			candidates = append(candidates, p)
 		}
-		if f.browser != "" && p.Browser != f.browser {
-			continue
-		}
-		if f.mobile != nil && p.Mobile != *f.mobile {
-			continue
-		}
-		candidates = append(candidates, p)
+		return candidates
 	}
 
+	candidates := pick(f)
+	if len(candidates) == 0 && f.browser != "" {
+		candidates = pick(profileFilter{browser: f.browser})
+	}
 	if len(candidates) == 0 {
-		return BuiltinProfiles[rand.IntN(len(BuiltinProfiles))]
+		return BrowserProfile{}
 	}
 	return candidates[rand.IntN(len(candidates))]
 }

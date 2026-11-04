@@ -63,9 +63,15 @@ func WithProxy(url string) ClientOption {
 	}
 }
 
-// WithProfile sets the TLS client profile for fingerprint impersonation.
+// WithProfile sets the TLS client profile for fingerprint impersonation. The
+// zero value "" means "no preference" and keeps the default profile; a
+// non-empty name with no backend mapping makes NewClient fail with
+// ErrUnknownTLSProfile.
 func WithProfile(p TLSProfile) ClientOption {
 	return func(c *clientConfig) {
+		if p == "" {
+			return
+		}
 		c.profile = p
 	}
 }
@@ -88,7 +94,9 @@ func WithIdentity(id BrowserIdentity) ClientOption {
 			id.ClientHints = ClientHintsHeaders(id.UserAgent)
 		}
 		c.identity = &id
-		c.profile = id.TLSProfile
+		if id.TLSProfile != "" {
+			c.profile = id.TLSProfile
+		}
 	}
 }
 

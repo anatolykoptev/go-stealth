@@ -138,11 +138,23 @@ func TestRandomProfile_EdgeWindows(t *testing.T) {
 	}
 }
 
-func TestRandomProfile_FallbackOnNoMatch(t *testing.T) {
-	// Non-existent combo should fallback
-	p := RandomProfile(WithOS("freebsd"))
-	if p.UserAgent == "" {
-		t.Fatal("expected fallback profile")
+// TestRandomProfile_NoMatchNeverChangesBrowser: filters nothing satisfies must
+// not fall back to an arbitrary profile (macos+safari used to yield Firefox).
+func TestRandomProfile_NoMatchNeverChangesBrowser(t *testing.T) {
+	// Browser filter kept, OS relaxed: Safari is only built in for iOS.
+	for i := 0; i < 50; i++ {
+		p := RandomProfile(WithBrowser("safari"), WithOS("macos"))
+		if p.Browser != "safari" {
+			t.Fatalf("WithBrowser(safari)+WithOS(macos) returned browser %q (%s)", p.Browser, p.UserAgent)
+		}
+	}
+	// No browser to keep: the zero value, detectable by the empty UserAgent.
+	if p := RandomProfile(WithOS("freebsd")); p.UserAgent != "" || p.TLSProfile != "" {
+		t.Fatalf("RandomProfile(freebsd) = %+v, want the zero BrowserProfile", p)
+	}
+	// Unknown browser: zero value too.
+	if p := RandomProfile(WithBrowser("netscape")); p.UserAgent != "" {
+		t.Fatalf("RandomProfile(netscape) = %+v, want the zero BrowserProfile", p)
 	}
 }
 

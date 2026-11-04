@@ -41,13 +41,16 @@ var DefaultHeaderOrder = []string{
 }
 
 // FirefoxHeaderOrder is the Firefox request-header order on a top-level GET
-// navigation over HTTP/2, as observed from a real Firefox. referer and cookie
-// are appended so they stay ordered when a caller supplies them.
+// navigation over HTTP/2, as observed from a real Firefox. cookie was
+// captured between accept-encoding and upgrade-insecure-requests; referer is
+// placed just before it (its position was not captured).
 var FirefoxHeaderOrder = []string{
 	"user-agent",
 	"accept",
 	"accept-language",
 	"accept-encoding",
+	"referer",
+	"cookie",
 	"upgrade-insecure-requests",
 	"sec-fetch-dest",
 	"sec-fetch-mode",
@@ -55,8 +58,6 @@ var FirefoxHeaderOrder = []string{
 	"sec-fetch-user",
 	"priority",
 	"te",
-	"referer",
-	"cookie",
 }
 
 // DefaultHeaderOrderFor returns the request-header order that matches the

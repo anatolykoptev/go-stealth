@@ -252,20 +252,41 @@ func TestTLSProfile_NewChromeMapsToCorrectBogdanfinnProfile(t *testing.T) {
 	}
 }
 
-// TestUnmappedTLSProfileFailsLoudly: an unmapped TLSProfile (or "") must be an
-// error, never a silent substitution of another browser (it used to become
-// Chrome_131).
+// TestUnmappedTLSProfileFailsLoudly: a non-empty TLSProfile with no mapping
+// must be an error, never a silent substitution of another browser (it used to
+// become Chrome_131). The zero value "" is not a name: it means "use the
+// default" and is resolved before the backend is reached.
 func TestUnmappedTLSProfileFailsLoudly(t *testing.T) {
-	for _, p := range []TLSProfile{"unknown_profile", ""} {
-		if _, err := mapTLSProfile(p); !errors.Is(err, ErrUnknownTLSProfile) {
-			t.Errorf("mapTLSProfile(%q) err = %v, want ErrUnknownTLSProfile", p, err)
-		}
-		if _, err := newTLSClientBackend(BackendConfig{Profile: p, TimeoutSeconds: 5}); !errors.Is(err, ErrUnknownTLSProfile) {
-			t.Errorf("newTLSClientBackend(%q) err = %v, want ErrUnknownTLSProfile", p, err)
-		}
+	const invented TLSProfile = "unknown_profile"
+	if _, err := mapTLSProfile(invented); !errors.Is(err, ErrUnknownTLSProfile) {
+		t.Errorf("mapTLSProfile(%q) err = %v, want ErrUnknownTLSProfile", invented, err)
 	}
-	if _, err := NewClient(WithProfile("unknown_profile"), WithoutSSRFGuard()); !errors.Is(err, ErrUnknownTLSProfile) {
-		t.Errorf("NewClient(unknown profile) err = %v, want ErrUnknownTLSProfile", err)
+	if _, err := newTLSClientBackend(BackendConfig{Profile: invented, TimeoutSeconds: 5}); !errors.Is(err, ErrUnknownTLSProfile) {
+		t.Errorf("newTLSClientBackend(%q) err = %v, want ErrUnknownTLSProfile", invented, err)
+	}
+	if _, err := NewClient(WithProfile(invented), WithoutSSRFGuard()); !errors.Is(err, ErrUnknownTLSProfile) {
+		t.Errorf("NewClient(invented profile) err = %v, want ErrUnknownTLSProfile", err)
+	}
+}
+
+// TestEmptyTLSProfileMeansDefault: consumers pass the zero value for "no
+// preference" (struct-literal accounts, blank saved sessions); that must give
+// the default profile, not a construction error.
+func TestEmptyTLSProfileMeansDefault(t *testing.T) {
+	for name, opts := range map[string][]ClientOption{
+		"WithProfile":  {WithProfile("")},
+		"WithIdentity": {WithIdentity(BrowserIdentity{})},
+	} {
+		c, err := NewClient(append(opts, WithoutSSRFGuard())...)
+		if err != nil {
+			t.Fatalf("%s(\"\"): NewClient error: %v", name, err)
+		}
+		if got := c.Identity().TLSProfile; got == "" && name == "WithProfile" {
+			t.Errorf("%s(\"\"): identity profile empty, want the default", name)
+		}
+		if name == "WithProfile" && c.Identity().TLSProfile != ProfileChrome152 {
+			t.Errorf("%s(\"\"): profile %q, want default %q", name, c.Identity().TLSProfile, ProfileChrome152)
+		}
 	}
 }
 

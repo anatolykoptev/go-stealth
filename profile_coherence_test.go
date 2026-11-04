@@ -135,22 +135,44 @@ func TestEveryMappedProfileHasIdentity(t *testing.T) {
 }
 
 // TestClientHintsMatchRealBrowsers compares ClientHintsHeaders with sec-ch-ua
-// strings captured from real Chromium builds (fixtures are literal captures,
-// not the output of the code under test): the GREASE brand, its version and
-// the brand order all change with the major.
+// strings emitted by real Chrome builds. The fixtures are literal values from
+// outside this package (not the output of the code under test); the GREASE
+// brand, its version and the brand order all change with the major, and the
+// six majors below hit each of the six brand-order permutations (major % 6).
+//
+// Sources (third-party request headers copied from real Chrome, pinned blobs):
+//   - 122 (row 2): github.com/DIYgod/RSSHub blob e2f32bc5…/lib/routes/xiaohongshu/util.ts
+//   - 123 (row 3): github.com/imsyy/DailyHotApi blob 36c77e3b…/src/routes/bilibili.ts
+//   - 124 (row 4): github.com/BillPetti/baseballr blob 644a249e…/R/utils_mlb_stats.R
+//   - 125 (row 5): github.com/ShilongLee/Crawler blob e7dea289…/script/bilibili/download.py
+//   - 145 (row 1) and 156 (row 0): captured from real Chromium builds through
+//     an HTTP/2 echo service.
 func TestClientHintsMatchRealBrowsers(t *testing.T) {
-	tests := []struct {
-		name, ua, want string
-	}{
-		{"chrome145", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-			`"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"`},
-		{"chrome156", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
-			`"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"`},
+	const uaFmt = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36"
+	tests := []struct{ major, want string }{
+		{"156", `"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"`},  // 156 % 6 = 0
+		{"145", `"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"`}, // 145 % 6 = 1
+		{"122", `"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"`}, // 122 % 6 = 2
+		{"123", `"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"`},  // 123 % 6 = 3
+		{"124", `"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"`}, // 124 % 6 = 4
+		{"125", `"Google Chrome";v="125", "Chromium";v="125", "Not.A/Brand";v="24"`}, // 125 % 6 = 5
 	}
 	for _, tt := range tests {
-		if got := ClientHintsHeaders(tt.ua)["sec-ch-ua"]; got != tt.want {
-			t.Errorf("%s: sec-ch-ua = %s, want %s", tt.name, got, tt.want)
+		ua := strings.Replace(uaFmt, "%s", tt.major, 1)
+		if got := ClientHintsHeaders(ua)["sec-ch-ua"]; got != tt.want {
+			t.Errorf("Chrome %s: sec-ch-ua = %s, want %s", tt.major, got, tt.want)
 		}
+	}
+}
+
+// TestSecChUaMatchesChromiumUnitTest ports the expected value of Chromium's
+// own GenerateBrandVersionListWithBrand test (seed 84, brand "Totally A
+// Brand"): components/embedder_support/user_agent_utils_unittest.cc at
+// chromium/chromium commit 482f8fbb933447204c81d26a00614e4b0e4a602d.
+func TestSecChUaMatchesChromiumUnitTest(t *testing.T) {
+	want := `"Not;A=Brand";v="8", "Chromium";v="84", "Totally A Brand";v="84"`
+	if got := secChUa("84", "Totally A Brand", "84"); got != want {
+		t.Errorf("secChUa(84) = %s, want %s", got, want)
 	}
 }
 
@@ -163,6 +185,19 @@ func TestDefaultHeaderOrderMatchesBrowser(t *testing.T) {
 	}
 	if got := ff.headerOrder[0]; got != "user-agent" {
 		t.Errorf("firefox client header order starts with %q, want user-agent", got)
+	}
+	// cookie sits between accept-encoding and upgrade-insecure-requests in a
+	// real Firefox capture.
+	idx := func(h string) int {
+		for i, v := range ff.headerOrder {
+			if v == h {
+				return i
+			}
+		}
+		return -1
+	}
+	if !(idx("accept-encoding") < idx("cookie") && idx("cookie") < idx("upgrade-insecure-requests")) {
+		t.Errorf("firefox order places cookie wrongly: %v", ff.headerOrder)
 	}
 	ch, err := NewClient(WithProfile(ProfileChrome152), WithoutSSRFGuard())
 	if err != nil {
