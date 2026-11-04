@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.27.0](https://github.com/anatolykoptev/go-stealth/compare/v1.26.1...v1.27.0) (2026-11-04)
+
+
+### Added
+
+* match Chrome's TLS extension shuffle, fetch priority, zstd and add chrome_156 ([#74](https://github.com/anatolykoptev/go-stealth/issues/74)) ([c0549b9](https://github.com/anatolykoptev/go-stealth/commit/c0549b97c8d71327f48c45db18958299013efbcc))
+
 ## [1.26.1](https://github.com/anatolykoptev/go-stealth/compare/v1.26.0...v1.26.1) (2026-11-04)
 
 
