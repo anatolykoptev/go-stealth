@@ -30,6 +30,10 @@ type BackendConfig struct {
 	FollowRedirects bool
 	HTTP3           bool
 
+	// FetchMode requests the fetch/XHR request shape: HTTP/2 priority weight
+	// 220 on HEADERS instead of the navigation weight 256 (see WithFetchMode).
+	FetchMode bool
+
 	// InsecureSkipVerify, when true, disables TLS certificate verification.
 	// Honored by the tls-client backend; the std backend verifies by default
 	// (net/http) and will honor this field when wired.

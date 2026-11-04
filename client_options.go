@@ -26,6 +26,7 @@ type clientConfig struct {
 	callerBackend      bool                 // true when backend came from WithBackend: the caller owns that doer and Close leaves it alone
 	newHTTPClient      tlsHTTPClientFactory // test seam, per client; nil = tls_client.NewHttpClient
 	http3              bool
+	fetchMode          bool
 	insecureSkipVerify bool
 	blockRetries       int
 	cookieProvider     CookieProvider
@@ -97,6 +98,31 @@ func WithIdentity(id BrowserIdentity) ClientOption {
 		if id.TLSProfile != "" {
 			c.profile = id.TLSProfile
 		}
+	}
+}
+
+// WithFetchMode makes the client behave like a Chrome page issuing fetch()
+// and XMLHttpRequest calls rather than top-level navigations (the default).
+// Two things change, and both match what Chrome sends for such requests:
+//
+//   - HTTP/2: the HEADERS frame carries exclusive priority weight 220
+//     instead of the navigation weight 256.
+//   - Headers: a request without its own "priority" header gets
+//     "priority: u=1, i". A priority header the caller sets is kept as is.
+//
+// The mode belongs to the whole client because HTTP/2 priority is a property
+// of the connection's transport, not of a single request; a caller that
+// mixes navigations and fetches builds one client of each (they then use
+// separate connections, which Chrome does not). The cookie jar is per client.
+//
+// It needs a Chrome-family profile (chrome_*, brave_*); on Firefox or Safari
+// NewClient returns ErrFetchModeUnsupported rather than present a Chrome
+// request shape over another browser's fingerprint. It is opt-in for every
+// profile, chrome_131 included: without it the wire is unchanged. With
+// WithStdHTTP only the header part applies (net/http cannot set a priority).
+func WithFetchMode() ClientOption {
+	return func(c *clientConfig) {
+		c.fetchMode = true
 	}
 }
 
