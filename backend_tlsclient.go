@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	fhttp "github.com/bogdanfinn/fhttp"
+	"github.com/bogdanfinn/fhttp/http2"
 	tls_client "github.com/bogdanfinn/tls-client"
 	"github.com/bogdanfinn/tls-client/profiles"
 )
@@ -33,6 +34,17 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 	profile, err := mapTLSProfile(cfg.Profile)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.FetchMode {
+		profile = withFetchPriority(profile)
+	}
+	// Chrome shuffles its TLS extension order on every connection (since 106),
+	// so a real Chrome never repeats one JA3 across connections. tls-client's
+	// Chrome profiles ship a fixed order (the profile's RandomExtensionOrder
+	// flag is not honoured), and its client-level shuffle option is biased
+	// (see extension_order.go), so the profile carries our own shuffle.
+	if randomizesExtensionOrder(cfg.Profile) {
+		profile = withUniformExtensionOrder(profile)
 	}
 
 	opts := []tls_client.HttpClientOption{
@@ -227,12 +239,16 @@ func (t *tlsClientDoer) GetCookieValue(rawURL, name string) string {
 
 // profileMap maps go-stealth TLSProfile values to bogdanfinn profiles.
 var profileMap = map[TLSProfile]profiles.ClientProfile{
-	ProfileChrome131:   profiles.Chrome_131,
-	ProfileChrome133:   profiles.Chrome_133,
-	ProfileChrome144:   profiles.Chrome_144,
-	ProfileChrome146:   profiles.Chrome_146,
-	ProfileChrome150:   profiles.Chrome_150,
-	ProfileChrome152:   profiles.Chrome_152,
+	ProfileChrome131: profiles.Chrome_131,
+	ProfileChrome133: profiles.Chrome_133,
+	ProfileChrome144: profiles.Chrome_144,
+	ProfileChrome146: profiles.Chrome_146,
+	ProfileChrome150: profiles.Chrome_150,
+	ProfileChrome152: profiles.Chrome_152,
+	// chrome_156 has no profile of its own in tls-client v1.18.0; Chrome_152 is
+	// the newest it ships. Measured: its JA4, ja4_r, peetprint and HTTP/2
+	// fingerprint equal those of installed Google Chrome 156.0.8078.80.
+	ProfileChrome156:   profiles.Chrome_152,
 	ProfileFirefox133:  profiles.Firefox_133,
 	ProfileFirefox148:  profiles.Firefox_148,
 	ProfileBrave146:    profiles.Brave_146,
@@ -241,6 +257,46 @@ var profileMap = map[TLSProfile]profiles.ClientProfile{
 	ProfileSafariIOS17: profiles.Safari_IOS_17_0,
 	ProfileSafariIOS26: profiles.Safari_IOS_26_0,
 }
+
+// fetchPriorityWire is the HTTP/2 weight byte Chrome puts on the HEADERS frame
+// of fetch() and XMLHttpRequest requests. The effective weight is wire+1, so
+// 219 is the 220 that echo services print; navigations use 255 (256). It is
+// exclusive on stream 0, like navigations.
+const fetchPriorityWire = 219
+
+// withFetchPriority returns p with the fetch/XHR HEADERS priority and every
+// other setting (ClientHello, SETTINGS, WINDOW_UPDATE, pseudo-header order,
+// HTTP/3 parameters) carried over untouched. tls-client holds the header
+// priority on the profile and exposes no per-request override, which is why
+// fetch mode is a client-level choice.
+func withFetchPriority(p profiles.ClientProfile) profiles.ClientProfile {
+	return cloneProfile(p, p.GetClientHelloId(),
+		&http2.PriorityParam{StreamDep: 0, Exclusive: true, Weight: fetchPriorityWire})
+}
+
+// isChromiumTLSProfile reports whether p is a Chrome-family TLS profile.
+func isChromiumTLSProfile(p TLSProfile) bool {
+	return strings.HasPrefix(string(p), "chrome_") || strings.HasPrefix(string(p), "brave_")
+}
+
+// extensionOrderRandomised lists the profiles whose browser shuffles its TLS
+// extension order per connection. The legacy Chrome profiles (131, 133, 144)
+// are deliberately absent: chrome_131 is presented on purpose by existing
+// consumers and its wire is frozen (see TestWire_Chrome131Frozen); 133 and 144
+// are left as shipped.
+var extensionOrderRandomised = map[TLSProfile]bool{
+	ProfileChrome146: true,
+	ProfileChrome150: true,
+	ProfileChrome152: true,
+	ProfileChrome156: true,
+	ProfileBrave146:  true,
+}
+
+func randomizesExtensionOrder(p TLSProfile) bool { return extensionOrderRandomised[p] }
+
+// ErrFetchModeUnsupported is returned by NewClient when WithFetchMode is used
+// with a profile outside the Chrome family.
+var ErrFetchModeUnsupported = errors.New("stealth: fetch mode needs a Chrome-family profile")
 
 // ErrUnknownTLSProfile is returned when a TLSProfile has no backend mapping.
 // An unmapped profile must never quietly become a different browser, so

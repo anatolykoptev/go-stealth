@@ -1,0 +1,58 @@
+{
+  "provenance": {
+    "browser": "Chrome for Testing",
+    "version": "152.0.7977.82",
+    "build": "chrome-mac-arm64",
+    "platform": "macOS arm64",
+    "headless": false,
+    "mode": "nav",
+    "captured_at": "2026-11-04T09:12:22Z",
+    "endpoint": "https://tls.peet.ws/api/all",
+    "note": "navigation; first connection"
+  },
+  "tls": {
+    "ja4": "t13d1518h2_8daaf6152771_4980c97edce0",
+    "ja4_r": "t13d1518h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,12e0,44cd,ca34,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+    "peetprint_hash": "493a80d6a4267c7820685d29d92aa946"
+  },
+  "http2": {
+    "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+    "priority": {
+      "weight": 256,
+      "exclusive": true,
+      "depends_on": 0
+    },
+    "request_header_names": [
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "accept-language",
+      "upgrade-insecure-requests",
+      "user-agent",
+      "accept",
+      "sec-fetch-site",
+      "sec-fetch-mode",
+      "sec-fetch-user",
+      "sec-fetch-dest",
+      "accept-encoding",
+      "priority"
+    ],
+    "priority_header": "u=0, i",
+    "request_headers": {
+      "sec-ch-ua": "\"Not?A_Brand\";v=\"24\", \"Chromium\";v=\"152\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"macOS\"",
+      "accept-language": "en-US,en;q=0.9",
+      "upgrade-insecure-requests": "1",
+      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+      "sec-fetch-site": "none",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-user": "?1",
+      "sec-fetch-dest": "document",
+      "accept-encoding": "gzip, deflate, br, zstd",
+      "priority": "u=0, i"
+    }
+  }
+}

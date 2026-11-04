@@ -1,4 +1,4 @@
-.PHONY: build test lint preflight clean fingerprint
+.PHONY: build test lint preflight clean fingerprint fingerprint-wire
 
 build:
 	GOWORK=off go build ./...
@@ -32,3 +32,10 @@ clean:
 # comparison to make it green.
 fingerprint:
 	GOWORK=off go test -tags fingerprint -count=1 -run 'TestFingerprintOracle|TestReferenceProvenance' ./...
+
+# fingerprint-wire measures every Chrome profile through tls.peet.ws and diffs it
+# field by field against real-browser captures in testdata/wire
+# (//go:build wirelive). Network required; an unreachable endpoint FAILS. Not
+# part of preflight.
+fingerprint-wire:
+	GOWORK=off go test -tags wirelive -count=1 -v -run TestWireLive .

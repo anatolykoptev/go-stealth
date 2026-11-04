@@ -208,7 +208,7 @@ func TestTLSProfileConstants(t *testing.T) {
 	profiles := []TLSProfile{
 		ProfileChrome131, ProfileChrome133,
 		ProfileChrome144, ProfileChrome146,
-		ProfileChrome150, ProfileChrome152,
+		ProfileChrome150, ProfileChrome152, ProfileChrome156,
 		ProfileFirefox133, ProfileFirefox148, ProfileBrave146,
 		ProfileSafari16, ProfileSafariIOS18, ProfileSafariIOS17, ProfileSafariIOS26,
 	}
@@ -284,8 +284,8 @@ func TestEmptyTLSProfileMeansDefault(t *testing.T) {
 		if got := c.Identity().TLSProfile; got == "" && name == "WithProfile" {
 			t.Errorf("%s(\"\"): identity profile empty, want the default", name)
 		}
-		if name == "WithProfile" && c.Identity().TLSProfile != ProfileChrome152 {
-			t.Errorf("%s(\"\"): profile %q, want default %q", name, c.Identity().TLSProfile, ProfileChrome152)
+		if name == "WithProfile" && c.Identity().TLSProfile != ProfileChrome156 {
+			t.Errorf("%s(\"\"): profile %q, want default %q", name, c.Identity().TLSProfile, ProfileChrome156)
 		}
 	}
 }

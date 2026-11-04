@@ -13,6 +13,7 @@ const (
 	ProfileChrome146   TLSProfile = "chrome_146"
 	ProfileChrome150   TLSProfile = "chrome_150"
 	ProfileChrome152   TLSProfile = "chrome_152"
+	ProfileChrome156   TLSProfile = "chrome_156"
 	ProfileFirefox133  TLSProfile = "firefox_133"
 	ProfileFirefox148  TLSProfile = "firefox_148"
 	ProfileBrave146    TLSProfile = "brave_146"
@@ -29,6 +30,10 @@ type BackendConfig struct {
 	TimeoutSeconds  int
 	FollowRedirects bool
 	HTTP3           bool
+
+	// FetchMode requests the fetch/XHR request shape: HTTP/2 priority weight
+	// 220 on HEADERS instead of the navigation weight 256 (see WithFetchMode).
+	FetchMode bool
 
 	// InsecureSkipVerify, when true, disables TLS certificate verification.
 	// Honored by the tls-client backend; the std backend verifies by default

@@ -1,19 +1,22 @@
 package stealth
 
-import "math/rand/v2"
+import (
+	"math/rand/v2"
+	"strconv"
+)
 
 // RandomUserAgents is a pool of browser User-Agents for rotation, for callers
 // that do not care which browser they look like (connectivity probes).
-// Its Chrome entries describe ONLY the default TLS profile (ProfileChrome152);
+// Its Chrome entries describe ONLY the default TLS profile (ProfileChrome156);
 // pairing a User-Agent from here with a client built on another profile
 // advertises a different browser than the one fingerprinted. Use
 // (*BrowserClient).Identity() or ChromeHeadersFor to get a matching one. Firefox entries are kept in line with ProfileFirefox148.
 // The Safari 17.2 entry is stale relative to BuiltinProfiles (17.6/18.2) but
 // out of scope here — left as-is.
 var RandomUserAgents = []string{
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
 	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
 	"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0",
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0",
@@ -95,12 +98,31 @@ func withHints(h, hints map[string]string) map[string]string {
 	return h
 }
 
+// navigationAcceptFrom156 is the navigation Accept of Chrome 156 and later:
+// image/jxl is listed ahead of image/avif. Chrome for Testing 131 and 152 do
+// not send it; 156 does (both branded and Chrome for Testing). The version
+// between 153 and 156 in which it first appeared is not pinned, so the cut is
+// at the first major measured with it.
+const (
+	navigationAccept        = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+	navigationAcceptFrom156 = "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+	jxlAcceptFirstMajor     = 156
+)
+
+// navigationAcceptFor returns the navigation Accept for the Chrome major in ua.
+func navigationAcceptFor(ua string) string {
+	if maj, err := strconv.Atoi(ExtractChromeVersion(ua)); err == nil && maj >= jxlAcceptFirstMajor {
+		return navigationAcceptFrom156
+	}
+	return navigationAccept
+}
+
 func chromeNavigationHeaders(ua string) map[string]string {
 	return map[string]string{
 		"accept-language":           "en-US,en;q=0.9",
 		"upgrade-insecure-requests": "1",
 		"user-agent":                ua,
-		"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		"accept":                    navigationAcceptFor(ua),
 		"sec-fetch-site":            "none",
 		"sec-fetch-mode":            "navigate",
 		"sec-fetch-user":            "?1",

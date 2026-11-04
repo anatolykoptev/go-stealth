@@ -82,6 +82,7 @@ type BrowserClient struct {
 	debug        bool
 	blockRetries int // extra retry attempts on 403/429 (requires proxyPool)
 	identity     BrowserIdentity
+	fetchMode    bool       // WithFetchMode: add Chrome's fetch/XHR priority header
 	doerCloser   io.Closer  // non-nil only for a doer the client built itself (not WithBackend)
 	doerIdler    idleCloser // same ownership rule as doerCloser
 	closeOnce    sync.Once
@@ -112,6 +113,11 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 	if len(cfg.buildErrors) > 0 {
 		return nil, cfg.buildErrors[0]
 	}
+	if cfg.fetchMode {
+		if err := checkFetchModeIdentity(cfg); err != nil {
+			return nil, err
+		}
+	}
 
 	// The dial guard sees the proxy's address on a proxied client. The proxy is
 	// operator configuration, so its endpoint (and only that) is let through.
@@ -128,6 +134,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		TimeoutSeconds:     cfg.timeout,
 		FollowRedirects:    cfg.followRedirs,
 		HTTP3:              cfg.http3,
+		FetchMode:          cfg.fetchMode,
 		InsecureSkipVerify: cfg.insecureSkipVerify,
 		DialControl:        dialControl,
 		RedirectGuard:      cfg.redirectGuard,
@@ -146,7 +153,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 
 	order := cfg.headerOrder
 	if order == nil {
-		order = DefaultHeaderOrderFor(resolveIdentity(cfg).Browser)
+		order = defaultHeaderOrderFor(resolveIdentity(cfg), cfg.fetchMode)
 	}
 
 	// The client owns every doer it builds itself (the default tls-client
@@ -171,6 +178,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		requestURLGuard: cfg.requestURLGuard,
 		proxyAllow:      proxyAllow,
 		identity:        resolveIdentity(cfg),
+		fetchMode:       cfg.fetchMode,
 	}
 	if cfg.debug {
 		bc.Use(LoggingMiddleware)
@@ -267,6 +275,9 @@ func (bc *BrowserClient) baseHandler(order []string) Handler {
 			}
 		}
 		req.HeaderOrder = order
+		if bc.fetchMode {
+			req.Headers = withFetchPriorityHeader(req.Headers)
+		}
 		return bc.doer.Do(req)
 	}
 }
@@ -486,4 +497,44 @@ func newOxBrowserClientMaybeProxy(baseURL string, proxyFn func(*http.Request) (*
 		return NewOxBrowserClientWithProxy(baseURL, proxyFn)
 	}
 	return NewOxBrowserClient(baseURL)
+}
+
+// fetchPriorityHeader is the priority header Chrome sends on fetch() and
+// XMLHttpRequest (navigations send "u=0, i").
+const fetchPriorityHeader = "u=1, i"
+
+// withFetchPriorityHeader returns h with "priority: u=1, i" added unless the
+// caller already set a priority header under any capitalisation. It copies
+// rather than writing into h, which belongs to the caller.
+func withFetchPriorityHeader(h map[string]string) map[string]string {
+	for k := range h {
+		if strings.EqualFold(k, "priority") {
+			return h
+		}
+	}
+	out := make(map[string]string, len(h)+1)
+	for k, v := range h {
+		out[k] = v
+	}
+	out["priority"] = fetchPriorityHeader
+	return out
+}
+
+// checkFetchModeIdentity refuses fetch mode unless both the TLS profile and
+// the identity the client reports are Chromium: an identity can name Firefox
+// or Safari and leave the TLS profile empty, which keeps the Chrome default.
+func checkFetchModeIdentity(cfg *clientConfig) error {
+	if !isChromiumTLSProfile(cfg.profile) {
+		return fmt.Errorf("%w: TLS profile %q", ErrFetchModeUnsupported, string(cfg.profile))
+	}
+	id := resolveIdentity(cfg)
+	switch id.Browser {
+	case "chrome", "edge", "brave":
+		return nil
+	case "":
+		if id.UserAgent == "" || strings.Contains(id.UserAgent, "Chrome/") {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: identity %q", ErrFetchModeUnsupported, id.Browser+" "+id.UserAgent)
 }
