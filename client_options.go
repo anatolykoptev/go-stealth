@@ -116,9 +116,10 @@ func WithIdentity(id BrowserIdentity) ClientOption {
 // mixes navigations and fetches builds one client of each (they then use
 // separate connections, which Chrome does not). The cookie jar is per client.
 //
-// It needs a Chrome-family profile (chrome_*, brave_*); on Firefox or Safari
-// NewClient returns ErrFetchModeUnsupported rather than present a Chrome
-// request shape over another browser's fingerprint. It is opt-in for every
+// It needs a Chrome-family TLS profile (chrome_*, brave_*) and a Chromium
+// identity (chrome, edge, brave); on Firefox or Safari, or an identity that
+// names one of them, NewClient returns ErrFetchModeUnsupported rather than
+// present a Chrome request shape over another browser's fingerprint. It is opt-in for every
 // profile, chrome_131 included: without it the wire is unchanged. With
 // WithStdHTTP only the header part applies (net/http cannot set a priority).
 func WithFetchMode() ClientOption {

@@ -113,8 +113,10 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 	if len(cfg.buildErrors) > 0 {
 		return nil, cfg.buildErrors[0]
 	}
-	if cfg.fetchMode && !isChromiumTLSProfile(cfg.profile) {
-		return nil, fmt.Errorf("%w: got %q", ErrFetchModeUnsupported, string(cfg.profile))
+	if cfg.fetchMode {
+		if err := checkFetchModeIdentity(cfg); err != nil {
+			return nil, err
+		}
 	}
 
 	// The dial guard sees the proxy's address on a proxied client. The proxy is
@@ -516,4 +518,23 @@ func withFetchPriorityHeader(h map[string]string) map[string]string {
 	}
 	out["priority"] = fetchPriorityHeader
 	return out
+}
+
+// checkFetchModeIdentity refuses fetch mode unless both the TLS profile and
+// the identity the client reports are Chromium: an identity can name Firefox
+// or Safari and leave the TLS profile empty, which keeps the Chrome default.
+func checkFetchModeIdentity(cfg *clientConfig) error {
+	if !isChromiumTLSProfile(cfg.profile) {
+		return fmt.Errorf("%w: TLS profile %q", ErrFetchModeUnsupported, string(cfg.profile))
+	}
+	id := resolveIdentity(cfg)
+	switch id.Browser {
+	case "chrome", "edge", "brave":
+		return nil
+	case "":
+		if id.UserAgent == "" || strings.Contains(id.UserAgent, "Chrome/") {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: identity %q", ErrFetchModeUnsupported, id.Browser+" "+id.UserAgent)
 }

@@ -145,3 +145,32 @@ func TestFetchMode_RejectsNonChromeProfiles(t *testing.T) {
 		}
 	}
 }
+
+// An identity can name a non-Chromium browser while leaving the TLS profile
+// empty, which keeps the (Chrome) default profile. Fetch mode must still refuse
+// it: the Chrome request shape would sit over a Firefox User-Agent.
+func TestFetchMode_RejectsNonChromiumIdentity(t *testing.T) {
+	ffUA := "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"
+	for name, id := range map[string]BrowserIdentity{
+		"firefox, no TLS profile":  {BrowserProfile: BrowserProfile{UserAgent: ffUA, Browser: "firefox", OS: "windows"}},
+		"firefox UA, no browser":   {BrowserProfile: BrowserProfile{UserAgent: ffUA}},
+		"safari, chrome TLS":       {BrowserProfile: BrowserProfile{Browser: "safari", TLSProfile: ProfileChrome152}},
+		"firefox, firefox profile": {BrowserProfile: BrowserProfile{UserAgent: ffUA, Browser: "firefox", TLSProfile: ProfileFirefox148}},
+	} {
+		if _, err := NewClient(WithIdentity(id), WithFetchMode(), WithoutSSRFGuard()); !errors.Is(err, ErrFetchModeUnsupported) {
+			t.Errorf("%s: err = %v, want ErrFetchModeUnsupported", name, err)
+		}
+	}
+	for _, bp := range []BrowserProfile{
+		{UserAgent: UserAgentForProfile(ProfileChrome156), Browser: "chrome", TLSProfile: ProfileChrome156},
+		{UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0", Browser: "edge", TLSProfile: ProfileChrome152},
+		{TLSProfile: ProfileBrave146, Browser: "brave"},
+	} {
+		bc, err := NewClient(WithIdentity(BrowserIdentity{BrowserProfile: bp}), WithFetchMode(), WithoutSSRFGuard())
+		if err != nil {
+			t.Errorf("%s: %v", bp.Browser, err)
+			continue
+		}
+		_ = bc.Close()
+	}
+}
