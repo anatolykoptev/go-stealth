@@ -1,9 +1,6 @@
 package stealth
 
-import (
-	"math/rand/v2"
-	"strings"
-)
+import "math/rand/v2"
 
 // RandomUserAgents is a pool of browser User-Agents for rotation, for callers
 // that do not care which browser they look like (connectivity probes).
@@ -67,24 +64,19 @@ func ChromeHeaders() map[string]string {
 // its own User-Agent plus the sec-ch-ua-* Client Hints derived from it, so the
 // advertised browser matches the TLS fingerprint p.TLSProfile. Use it with the
 // profile the client was built with (BuiltinProfiles, RandomProfile,
-// PlatformMatchedProfile). Returns nil for profiles that are not Chromium-based
-// (Firefox, Safari): Chrome-shaped headers over those would be a mismatch.
+// PlatformMatchedProfile). For a non-Chromium profile (Firefox, Safari) it
+// returns the same navigation headers with that profile's own User-Agent and no
+// Client Hints, since those browsers send none. The result is never nil.
 func ChromeHeadersFor(p BrowserProfile) map[string]string {
-	if !strings.Contains(p.UserAgent, "Chrome/") {
-		return nil
-	}
 	return withHints(chromeNavigationHeaders(p.UserAgent), ClientHintsHeaders(p.UserAgent))
 }
 
 // ChromeHeaders returns Chrome navigation headers matching the identity this
 // client presents (see Identity): the identity's User-Agent and Client Hints
-// over the same header set as the package-level ChromeHeaders. Returns nil
-// when the identity is not Chromium-based or has no User-Agent.
+// over the same header set as the package-level ChromeHeaders. Never nil;
+// a non-Chromium identity carries no Client Hints.
 func (bc *BrowserClient) ChromeHeaders() map[string]string {
 	id := bc.Identity()
-	if !strings.Contains(id.UserAgent, "Chrome/") {
-		return nil
-	}
 	return withHints(chromeNavigationHeaders(id.UserAgent), id.ClientHints)
 }
 

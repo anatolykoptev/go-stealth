@@ -40,15 +40,32 @@ func TestChromeHeadersFor_MatchesProfileMajor(t *testing.T) {
 	}
 }
 
-// TestChromeHeadersFor_NonChromiumIsNil: Chrome-shaped headers over a
-// Firefox/Safari profile would themselves be a mismatch.
-func TestChromeHeadersFor_NonChromiumIsNil(t *testing.T) {
+// TestChromeHeadersFor_NonChromiumKeepsOwnUAWithoutHints: Firefox/Safari
+// profiles get a usable (non-nil) map carrying their own UA and no Client
+// Hints, so callers can write into it safely.
+func TestChromeHeadersFor_NonChromiumKeepsOwnUAWithoutHints(t *testing.T) {
+	seen := 0
 	for _, bp := range BuiltinProfiles {
-		if bp.Browser == "firefox" || bp.Browser == "safari" {
-			if h := ChromeHeadersFor(bp); h != nil {
-				t.Errorf("%s: ChromeHeadersFor = %v, want nil", bp.TLSProfile, h)
+		if bp.Browser != "firefox" && bp.Browser != "safari" {
+			continue
+		}
+		seen++
+		h := ChromeHeadersFor(bp)
+		if h == nil {
+			t.Fatalf("%s: ChromeHeadersFor returned nil map", bp.TLSProfile)
+		}
+		if h["user-agent"] != bp.UserAgent {
+			t.Errorf("%s: user-agent = %q, want %q", bp.TLSProfile, h["user-agent"], bp.UserAgent)
+		}
+		for k := range h {
+			if strings.HasPrefix(k, "sec-ch-ua") {
+				t.Errorf("%s: unexpected client hint %q", bp.TLSProfile, k)
 			}
 		}
+		h["x-extra"] = "1" // must not panic
+	}
+	if seen == 0 {
+		t.Fatal("no Firefox/Safari BuiltinProfiles found")
 	}
 }
 
