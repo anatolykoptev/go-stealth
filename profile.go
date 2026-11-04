@@ -153,8 +153,10 @@ var BuiltinProfiles = []BrowserProfile{
 	// a stock Chrome UA on every platform. So a correct entry pairs
 	// brave_146 with a Chrome/146 UA, which looks wrong but is what real Brave
 	// emits. Do NOT "fix" this to a Brave-branded UA — none exists. The
-	// distinguishing signal is the TLS fingerprint (Brave_146 sets
-	// RandomExtensionOrder: true), not the UA.
+	// distinguishing signal is the TLS fingerprint, not the UA. Brave
+	// shuffles its TLS extension order per connection; the backend turns that
+	// on explicitly (extensionOrderRandomised), because tls-client does not
+	// honour the profile's own RandomExtensionOrder flag.
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		TLSProfile: ProfileBrave146, Browser: "brave", OS: "windows",

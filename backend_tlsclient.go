@@ -78,6 +78,15 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 		opts = append(opts, tls_client.WithDisableHttp3())
 	}
 
+	// Chrome shuffles its TLS extension order on every connection (since 106),
+	// so a real Chrome never repeats one JA3 across connections. tls-client's
+	// Chrome profiles ship a fixed order (RandomExtensionOrder is not honoured
+	// from the profile), so the client-level option is what makes the order
+	// vary. GREASE stays first and last; only the other extensions move.
+	if randomizesExtensionOrder(cfg.Profile) {
+		opts = append(opts, tls_client.WithRandomTLSExtensionOrder())
+	}
+
 	newClient := cfg.newHTTPClient
 	if newClient == nil {
 		newClient = tls_client.NewHttpClient
@@ -241,6 +250,20 @@ var profileMap = map[TLSProfile]profiles.ClientProfile{
 	ProfileSafariIOS17: profiles.Safari_IOS_17_0,
 	ProfileSafariIOS26: profiles.Safari_IOS_26_0,
 }
+
+// extensionOrderRandomised lists the profiles whose browser shuffles its TLS
+// extension order per connection. The legacy Chrome profiles (131, 133, 144)
+// are deliberately absent: chrome_131 is presented on purpose by existing
+// consumers and its wire is frozen (see TestWire_Chrome131Frozen); 133 and 144
+// are left as shipped.
+var extensionOrderRandomised = map[TLSProfile]bool{
+	ProfileChrome146: true,
+	ProfileChrome150: true,
+	ProfileChrome152: true,
+	ProfileBrave146:  true,
+}
+
+func randomizesExtensionOrder(p TLSProfile) bool { return extensionOrderRandomised[p] }
 
 // ErrUnknownTLSProfile is returned when a TLSProfile has no backend mapping.
 // An unmapped profile must never quietly become a different browser, so
