@@ -151,7 +151,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 
 	order := cfg.headerOrder
 	if order == nil {
-		order = DefaultHeaderOrderFor(resolveIdentity(cfg).Browser)
+		order = defaultHeaderOrderFor(resolveIdentity(cfg), cfg.fetchMode)
 	}
 
 	// The client owns every doer it builds itself (the default tls-client

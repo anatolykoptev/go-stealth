@@ -13,6 +13,7 @@ const (
 
 type recordedReq struct {
 	headers map[string]string
+	order   []string
 }
 
 // captureDoer is a backend that records the request headers it is handed.
@@ -26,6 +27,7 @@ func (d captureDoer) Do(req *Request) (*Response, error) {
 		h[k] = v
 	}
 	d.got.headers = h
+	d.got.order = req.HeaderOrder
 	return &Response{StatusCode: 200, Headers: map[string]string{}}, nil
 }
 func (d captureDoer) SetProxy(string) error             { return nil }
