@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.28.0](https://github.com/anatolykoptev/go-stealth/compare/v1.27.0...v1.28.0) (2026-11-04)
+
+
+### Added
+
+* WithCookieJar shares one cookie jar across clients ([#80](https://github.com/anatolykoptev/go-stealth/issues/80)) ([07f3650](https://github.com/anatolykoptev/go-stealth/commit/07f36505690a39bd24538a2f32b41b51b3165e7b))
+
 ## [1.27.0](https://github.com/anatolykoptev/go-stealth/compare/v1.26.1...v1.27.0) (2026-11-04)
 
 
