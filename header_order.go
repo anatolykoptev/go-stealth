@@ -11,8 +11,11 @@ import "slices"
 // accept-encoding. DefaultHeaderOrder was captured from Chrome for Testing,
 // which puts accept-language right after sec-ch-ua-platform; branded Google
 // Chrome does not. The difference follows the build, not the version (Chrome
-// for Testing 156 has the early placement too), so the other Chrome profiles
-// keep DefaultHeaderOrder.
+// for Testing 131, 152 and 156 all have the early placement), so every modern
+// Chrome profile whose TLS extension order is shuffled (chrome_146, 150, 152,
+// 156) uses this order, and chrome_131, 133 and 144 keep DefaultHeaderOrder.
+// Branded 146 to 152 were not captured themselves; the placement is carried
+// over from the branded 156 capture on the build argument.
 //
 // referer and cookie are absent from a first request, so the capture does not
 // place them; they take the positions they have in the fetch captures (referer
@@ -21,6 +24,17 @@ import "slices"
 var ChromeNavigationHeaderOrder = []string{
 	"sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
 	"upgrade-insecure-requests", "user-agent", "accept",
+	"sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest",
+	"referer", "accept-encoding", "accept-language", "cookie", "priority",
+}
+
+// braveNavigationHeaderOrder is the order of Brave 156's navigation
+// (testdata capture ref_brave_nav): the branded Chrome order plus sec-gpc right
+// after accept. go-stealth does not send sec-gpc itself; a caller that does
+// gets it in Brave's position.
+var braveNavigationHeaderOrder = []string{
+	"sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
+	"upgrade-insecure-requests", "user-agent", "accept", "sec-gpc",
 	"sec-fetch-site", "sec-fetch-mode", "sec-fetch-user", "sec-fetch-dest",
 	"referer", "accept-encoding", "accept-language", "cookie", "priority",
 }
@@ -62,15 +76,17 @@ func ChromeFetchHeaderOrder(custom []string) []string {
 }
 
 // defaultHeaderOrderFor picks the header order a client uses when the caller
-// gave none: fetch mode gets the fetch order, the default Chrome 156 profile
-// the branded-Chrome navigation order, every other profile the order it has
-// always had.
+// gave none: fetch mode gets the fetch order, the modern Chrome profiles the
+// branded-Chrome navigation order, Brave its own, every other profile (chrome_131,
+// 133, 144, Edge, Firefox, Safari) the order it has always had.
 func defaultHeaderOrderFor(id BrowserIdentity, fetchMode bool) []string {
 	switch {
 	case fetchMode:
 		return ChromeFetchHeaderOrder(nil)
-	case id.TLSProfile == ProfileChrome156 && id.Browser == "chrome":
+	case id.Browser == "chrome" && extensionOrderRandomised[id.TLSProfile]:
 		return slices.Clone(ChromeNavigationHeaderOrder)
+	case id.Browser == "brave" && id.TLSProfile == ProfileBrave146:
+		return slices.Clone(braveNavigationHeaderOrder)
 	default:
 		return DefaultHeaderOrderFor(id.Browser)
 	}

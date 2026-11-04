@@ -55,10 +55,20 @@ func TestClientHeaderOrder_PerProfile(t *testing.T) {
 	if got := orderOf(t); !slices.Equal(got, ChromeNavigationHeaderOrder) {
 		t.Errorf("default client order = %v, want ChromeNavigationHeaderOrder", got)
 	}
-	for _, p := range []TLSProfile{ProfileChrome152, ProfileChrome131} {
+	for _, p := range []TLSProfile{ProfileChrome146, ProfileChrome150, ProfileChrome152, ProfileChrome156} {
+		if got := orderOf(t, WithProfile(p)); !slices.Equal(got, ChromeNavigationHeaderOrder) {
+			t.Errorf("%s order = %v, want ChromeNavigationHeaderOrder", p, got)
+		}
+	}
+	for _, p := range []TLSProfile{ProfileChrome131, ProfileChrome133, ProfileChrome144} {
 		if got := orderOf(t, WithProfile(p)); !slices.Equal(got, DefaultHeaderOrder) {
 			t.Errorf("%s order = %v, want DefaultHeaderOrder", p, got)
 		}
+	}
+	wantBrave := slices.Clone(ChromeNavigationHeaderOrder)
+	wantBrave = slices.Insert(wantBrave, slices.Index(wantBrave, "accept")+1, "sec-gpc")
+	if got := orderOf(t, WithProfile(ProfileBrave146)); !slices.Equal(got, wantBrave) {
+		t.Errorf("brave_146 order = %v, want %v", got, wantBrave)
 	}
 	if got := orderOf(t, WithProfile(ProfileFirefox148)); !slices.Equal(got, FirefoxHeaderOrder) {
 		t.Errorf("firefox order = %v", got)
