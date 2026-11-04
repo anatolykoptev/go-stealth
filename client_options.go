@@ -28,6 +28,7 @@ type clientConfig struct {
 	http3              bool
 	fetchMode          bool
 	insecureSkipVerify bool
+	cookieJar          http.CookieJar // WithCookieJar; nil = backend default jar
 	blockRetries       int
 	cookieProvider     CookieProvider
 	oxBrowserURL       string
@@ -125,6 +126,31 @@ func WithIdentity(id BrowserIdentity) ClientOption {
 func WithFetchMode() ClientOption {
 	return func(c *clientConfig) {
 		c.fetchMode = true
+	}
+}
+
+// WithCookieJar makes the client store and send cookies through jar instead of
+// its own private jar. Pass the same jar to several clients to share one
+// cookie store, as the tabs and workers of one browser do: a cookie set by a
+// response to one client is sent by the next request of another.
+//
+// The jar decides everything about a cookie: which domain and path it is
+// scoped to, expiry and deletion (a cookie set with MaxAge < 0 is removed),
+// and the order cookies are sent in. net/http/cookiejar orders them as RFC 6265
+// does and as Chrome does: longer path first, then earliest creation, so
+// cookies from one response keep their Set-Cookie order. The caller can seed,
+// read or delete cookies by calling the jar directly, which lets it drop an
+// explicit Cookie header (a Cookie header set on a request is sent in addition
+// to the jar's cookies, so a cookie in both is sent twice).
+//
+// The jar must be safe for concurrent use (net/http/cookiejar is). A nil jar
+// keeps the default per-client jar. The tls-client default jar is not changed:
+// it keys cookies by the last two host labels, ignores Domain and Path, and
+// returns one response's cookies in reverse Set-Cookie order. Works with both
+// backends and does not touch the TLS or HTTP/2 wire.
+func WithCookieJar(jar http.CookieJar) ClientOption {
+	return func(c *clientConfig) {
+		c.cookieJar = jar
 	}
 }
 

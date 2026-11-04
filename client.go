@@ -135,6 +135,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		FollowRedirects:    cfg.followRedirs,
 		HTTP3:              cfg.http3,
 		FetchMode:          cfg.fetchMode,
+		CookieJar:          cfg.cookieJar,
 		InsecureSkipVerify: cfg.insecureSkipVerify,
 		DialControl:        dialControl,
 		RedirectGuard:      cfg.redirectGuard,
