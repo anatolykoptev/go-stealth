@@ -123,3 +123,17 @@ func TestRandomUserAgents_ChromeEntriesMatchDefault(t *testing.T) {
 		}
 	}
 }
+
+// TestPickChromeUserAgent_EmptyPoolFallsBack: an empty default pool (default
+// profile not a desktop Chrome entry) must not panic and must still yield a UA
+// matching the default TLS major.
+func TestPickChromeUserAgent_EmptyPoolFallsBack(t *testing.T) {
+	ua := pickChromeUserAgent(nil)
+	def := defaultConfig().profile
+	if got, want := ExtractChromeVersion(ua), profileMajor(def); got != want {
+		t.Fatalf("fallback UA major %q, want %q (UA=%q)", got, want, ua)
+	}
+	if ua != UserAgentForProfile(def) {
+		t.Fatalf("fallback UA = %q, want UserAgentForProfile(default)", ua)
+	}
+}

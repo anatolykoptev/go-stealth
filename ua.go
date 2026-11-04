@@ -56,8 +56,16 @@ func defaultChromeUserAgents() []string {
 // these headers' names and order (in header_order), not their values, and the
 // oracle compares only names+order for them.
 func ChromeHeaders() map[string]string {
-	uas := defaultChromeUserAgents()
-	return chromeNavigationHeaders(uas[rand.IntN(len(uas))])
+	return chromeNavigationHeaders(pickChromeUserAgent(defaultChromeUserAgents()))
+}
+
+// pickChromeUserAgent returns a random entry of uas, or the default profile's
+// own User-Agent when uas is empty, so ChromeHeaders can never panic.
+func pickChromeUserAgent(uas []string) string {
+	if len(uas) == 0 {
+		return UserAgentForProfile(defaultConfig().profile)
+	}
+	return uas[rand.IntN(len(uas))]
 }
 
 // ChromeHeadersFor returns Chrome navigation headers that describe profile p:
