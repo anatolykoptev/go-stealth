@@ -19,7 +19,7 @@ const errorBodyLimit = 64 << 10
 // It stops after webshareMaxPages pages to guard against infinite loops.
 func fetchAllProxies(ctx context.Context, apiKey string, cfg WebshareConfig) ([]webshareProxy, error) {
 	firstURL := buildAPIURL(cfg)
-	client := noRedirectClient(cfg.HTTPClient)
+	client := cfg.HTTPClient
 
 	var all []webshareProxy
 	nextURL := firstURL
@@ -67,10 +67,26 @@ func checkSameOrigin(first, next string) error {
 	if err != nil {
 		return fmt.Errorf("proxy: parse next page URL: %w", err)
 	}
-	if !strings.EqualFold(fu.Scheme, nu.Scheme) || !strings.EqualFold(fu.Host, nu.Host) {
+	if !strings.EqualFold(fu.Scheme, nu.Scheme) ||
+		!strings.EqualFold(fu.Hostname(), nu.Hostname()) ||
+		effectivePort(fu) != effectivePort(nu) {
 		return fmt.Errorf("proxy: refusing cross-origin next page link (%s://%s)", nu.Scheme, nu.Host)
 	}
 	return nil
+}
+
+// effectivePort returns the explicit port, or the scheme default.
+func effectivePort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	}
+	return ""
 }
 
 // fetchPage fetches a single API page and returns raw proxy entries (no next link).
@@ -87,7 +103,7 @@ func fetchPageWithNext(ctx context.Context, client *http.Client, apiURL, apiKey 
 	}
 	req.Header.Set("Authorization", "Token "+apiKey)
 
-	resp, err := client.Do(req)
+	resp, err := noRedirectClient(client).Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("proxy: fetch list: %w", err)
 	}
