@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 )
 
 // errorBodyLimit bounds the API error body copied into the returned error —
@@ -17,7 +19,7 @@ const errorBodyLimit = 64 << 10
 // It stops after webshareMaxPages pages to guard against infinite loops.
 func fetchAllProxies(ctx context.Context, apiKey string, cfg WebshareConfig) ([]webshareProxy, error) {
 	firstURL := buildAPIURL(cfg)
-	client := cfg.HTTPClient
+	client := noRedirectClient(cfg.HTTPClient)
 
 	var all []webshareProxy
 	nextURL := firstURL
@@ -30,6 +32,9 @@ func fetchAllProxies(ctx context.Context, apiKey string, cfg WebshareConfig) ([]
 		if next == "" {
 			break
 		}
+		if err := checkSameOrigin(firstURL, next); err != nil {
+			return nil, err
+		}
 		nextURL = next
 	}
 
@@ -37,6 +42,35 @@ func fetchAllProxies(ctx context.Context, apiKey string, cfg WebshareConfig) ([]
 		return nil, fmt.Errorf("proxy: webshare returned 0 proxies")
 	}
 	return all, nil
+}
+
+// noRedirectClient returns a shallow copy of c that never follows redirects,
+// so the Authorization header cannot be replayed to a redirect target.
+// The caller's client is left untouched.
+func noRedirectClient(c *http.Client) *http.Client {
+	if c == nil {
+		c = &http.Client{}
+	}
+	cp := *c
+	cp.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &cp
+}
+
+// checkSameOrigin rejects a pagination link whose scheme or host:port differs
+// from the first page, because every page request carries the API key.
+func checkSameOrigin(first, next string) error {
+	fu, err := url.Parse(first)
+	if err != nil {
+		return fmt.Errorf("proxy: parse first page URL: %w", err)
+	}
+	nu, err := url.Parse(next)
+	if err != nil {
+		return fmt.Errorf("proxy: parse next page URL: %w", err)
+	}
+	if !strings.EqualFold(fu.Scheme, nu.Scheme) || !strings.EqualFold(fu.Host, nu.Host) {
+		return fmt.Errorf("proxy: refusing cross-origin next page link (%s://%s)", nu.Scheme, nu.Host)
+	}
+	return nil
 }
 
 // fetchPage fetches a single API page and returns raw proxy entries (no next link).
