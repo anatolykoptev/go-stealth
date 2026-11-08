@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.28.1](https://github.com/anatolykoptev/go-stealth/compare/v1.28.0...v1.28.1) (2026-11-08)
+
+
+### Fixed
+
+* follow provider pagination only on the same origin ([#85](https://github.com/anatolykoptev/go-stealth/issues/85)) ([9ff01ac](https://github.com/anatolykoptev/go-stealth/commit/9ff01ac892ae2601e27b6d0f7cb196f799c95978))
+
 ## [1.28.0](https://github.com/anatolykoptev/go-stealth/compare/v1.27.0...v1.28.0) (2026-11-04)
 
 
