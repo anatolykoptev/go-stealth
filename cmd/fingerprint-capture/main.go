@@ -48,7 +48,7 @@ func main() {
 		major                = flag.String("major", "", "Chrome major version to capture (e.g. 146), required")
 		peetEndpoint         = flag.String("peet-endpoint", fingerprint.PeetEndpoint, "peet.ws echo endpoint URL (JA3/peetprint/HTTP2/headers)")
 		browserleaksEndpoint = flag.String("browserleaks-endpoint", fingerprint.BrowserleaksEndpoint, "browserleaks echo endpoint URL (JA4/JA3n/JA4_o)")
-		cacheDir             = flag.String("cache-dir", defaultCacheDir(), "browser download cache (under /home/krolik/tmp by default)")
+		cacheDir             = flag.String("cache-dir", defaultCacheDir(), "browser download cache (under ~/tmp by default)")
 		testdataDir          = flag.String("testdata-dir", "testdata", "where to write the reference JSON")
 		mode                 = flag.String("mode", "headless", "capture mode: headless | headful")
 		display              = flag.String("display", "", "X display for headful mode (e.g. :99); requires Xvfb")

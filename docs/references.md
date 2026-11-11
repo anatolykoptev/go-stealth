@@ -36,7 +36,7 @@ https://github.com/sardanioss/httpcloak
 **Stack**: Custom forks (sardanioss/utls, sardanioss/net, sardanioss/quic-go).
 
 **Steal these patterns**:
-- **Session abstraction**: `Session{ID, CreatedAt, LastUsed, RequestCount}` — stateful scraping with request counting
+- **Session abstraction**: `Session{ID, CreatedAt, LastUsed, RequestCount}` — stateful fetching with request counting
 - **Distributed TLS session cache**: Backend interface for session resumption across instances
 - **Connection pool health**: `IsHealthy()`, `Age()`, `IdleTime()` per connection
 - **Platform auto-detection**: `runtime.GOOS` → match UA to actual platform
@@ -108,7 +108,7 @@ client := &http.Client{Transport: transport}
 
 ---
 
-## Scraping Frameworks (Patterns Only)
+## Crawling Frameworks (Patterns Only)
 
 ### gocolly/colly ★25,100
 https://github.com/gocolly/colly
@@ -152,7 +152,7 @@ https://github.com/mennanov/limiters
 **Status**: Active (Feb 2026).
 
 **Steal these patterns**:
-- **Token bucket algorithm**: Smoother request distribution than sliding window. Better for anti-ban because requests are spaced more evenly.
+- **Token bucket algorithm**: Smoother request distribution than sliding window. Better for rate-limit handling because requests are spaced more evenly.
 - **Leaky bucket**: Fixed output rate regardless of input burst
 - **Distributed backends**: Redis, etcd, DynamoDB, Memcached implementations
 - **Lock interface**: Abstraction for distributed locking

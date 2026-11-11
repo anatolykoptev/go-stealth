@@ -2,7 +2,7 @@
 
 ## Market Position
 
-go-stealth occupies a unique niche: the **operational anti-ban layer**. TLS impersonation libraries (surf, httpcloak, tls-client) solve "how to look like a browser". go-stealth solves "how to not get banned at scale" — proxy rotation, rate limiting, health tracking, retry with backoff, identity pool management.
+go-stealth occupies a unique niche: the **operational rate-limit-handling layer**. TLS impersonation libraries (surf, httpcloak, tls-client) solve "how to look like a browser". go-stealth solves "how to not get banned at scale" — proxy rotation, rate limiting, health tracking, retry with backoff, identity pool management.
 
 No competitor combines all of these into a single toolkit.
 
@@ -14,9 +14,9 @@ No competitor combines all of these into a single toolkit.
 | **bogdanfinn/tls-client** | 1,466 | 2022-07 | Active | TLS fingerprint engine (our dependency) |
 | **sardanioss/httpcloak** | 750 | 2025-12 | Active | Custom stack, multi-lang FFI |
 | **Noooste/azuretls-client** | 426 | 2023-05 | Moderate | Session-based, ergonomic |
-| **gocolly/colly** | 25,100 | 2017-09 | Active | Scraping framework |
+| **gocolly/colly** | 25,100 | 2017-09 | Active | Crawling framework |
 | **geziyor/geziyor** | 2,771 | 2019-06 | Stale | Scrapy clone for Go |
-| **go-stealth** | new | 2026-02 | Active | Operational anti-ban toolkit |
+| **go-stealth** | new | 2026-02 | Active | Operational rate-limit-handling toolkit |
 
 ---
 
@@ -116,7 +116,7 @@ No competitor combines all of these into a single toolkit.
 
 ### 5. gocolly/colly — The Giant (25k stars)
 
-**Different category** — full scraping framework, not anti-ban toolkit.
+**Different category** — full crawling framework, not a rate-limit-handling toolkit.
 
 **Relevant patterns**:
 - `proxy.RoundRobinProxySwitcher()` — simple but effective atomic counter rotation
@@ -158,10 +158,10 @@ No competitor combines all of these into a single toolkit.
 
 ## Strategic Conclusion
 
-go-stealth's value is **orthogonal** to TLS impersonation libraries. They solve transport-level fingerprinting; we solve operational-level anti-ban at scale. The ideal architecture:
+go-stealth's value is **orthogonal** to TLS impersonation libraries. They solve transport-level fingerprinting; we solve operational-level rate-limit handling at scale. The ideal architecture:
 
 ```
-[Consumer: go-search, go-hully, go-twitter, go-job]
+[Consumer: go-search, go-twitter, go-job]
     |
 [go-stealth: proxy rotation, rate limiting, retry, pool, health tracking]
     |
