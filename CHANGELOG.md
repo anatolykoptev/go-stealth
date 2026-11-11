@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.28.2](https://github.com/anatolykoptev/go-stealth/compare/v1.28.1...v1.28.2) (2026-11-11)
+
+
+### Documentation
+
+* bring repository documents up to the repo-standards set ([#84](https://github.com/anatolykoptev/go-stealth/issues/84)) ([72e06c3](https://github.com/anatolykoptev/go-stealth/commit/72e06c36240890367686fa16d994359c7695132f))
+
 ## [1.28.1](https://github.com/anatolykoptev/go-stealth/compare/v1.28.0...v1.28.1) (2026-11-08)
 
 
