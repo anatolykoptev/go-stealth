@@ -314,7 +314,7 @@ func TestDefaultDenyDial(t *testing.T) {
 		{"192.168.1.1:80", true},     // private
 		{"0.0.0.0:80", true},         // unspecified
 		{"[::1]:80", true},           // IPv6 loopback
-		{"93.184.216.34:443", false}, // public (example.com)
+		{"8.8.8.8:443", false},       // public
 		{"1.1.1.1:53", false},        // public
 	}
 	for _, tt := range tests {
@@ -343,7 +343,7 @@ func TestDefaultDenyURL(t *testing.T) {
 		{"https://[::1]/", true},
 		{"file:///etc/passwd", true},            // scheme not allowed
 		{"gopher://127.0.0.1:6379/_INFO", true}, // scheme not allowed
-		{"https://93.184.216.34/", false},       // public literal
+		{"https://9.9.9.9/", false},             // public literal
 	}
 	for _, tt := range tests {
 		u, err := url.Parse(tt.raw)
