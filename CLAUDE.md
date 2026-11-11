@@ -17,7 +17,7 @@ change here moves their wire behaviour. Every document is indexed in [docs/INDEX
   wrapper), `ratelimit/`, `session/`, `internal/fingerprint` and `internal/uri`.
 - `cmd/fingerprint-capture`: records a real Chrome's fingerprint as an oracle reference in
   `testdata/`. `testdata/wire/` holds real-browser captures for the wire check.
-- `docs/`: `compare.md`, `references.md`, `roadmap.md` and dated design plans under `docs/plans/`.
+- `docs/`: `compare.md`, `references.md` and `roadmap.md`.
 
 ## Gate
 
