@@ -1,15 +1,16 @@
 # go-stealth
 
-[![Go 1.26+](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)](go.mod)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go 1.27+](https://img.shields.io/badge/Go-1.27+-00ADD8?logo=go)](go.mod)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-Generic anti-ban toolkit for Go — TLS fingerprinting, proxy rotation, rate limiting, middleware, session management, and a generic pool with health tracking.
+A Go toolkit for HTTP clients that must present as a real browser: TLS fingerprinting, proxy rotation, rate limiting, middleware, session management, and a generic pool with health tracking.
 
-**Not a scraping framework** — a reusable HTTP layer that makes any Go HTTP client look like a real browser.
+It is a reusable HTTP layer, not an application: it carries no crawling or parsing logic.
 
 ## Features
 
-- **TLS Fingerprinting** — 14 browser profiles via [tls-client](https://github.com/bogdanfinn/tls-client): Chrome, Firefox, Safari, Brave and Edge, across macOS, Windows, Linux, Android and iOS
+- **TLS Fingerprinting** — browser profiles via [tls-client](https://github.com/bogdanfinn/tls-client): Chrome (up to `chrome_156`), Firefox, Safari, Brave and Edge, across macOS, Windows, Linux, Android and iOS; `BuiltinProfiles` lists the User-Agent paired with each
+- **Default-deny SSRF guard** — a client refuses loopback, private, link-local and cloud-metadata targets at connect time and on redirects unless you replace the guard (`WithDialControl`, `WithRedirectGuard`, `WithRequestURLGuard`) or opt out with `WithoutSSRFGuard`
 - **Proxy Rotation** — static list or [Webshare](https://www.webshare.io/) API, per-proxy health tracking with auto-skip
 - **Rate Limiting** — per-key sliding window + per-domain limiter with wildcard matching
 - **Middleware** — composable Handler/Middleware/Chain pattern (logging, retry, rate limit, client hints)
@@ -27,8 +28,9 @@ go get github.com/anatolykoptev/go-stealth
 ## Quick Start
 
 ```go
+p := stealth.RandomProfile(stealth.WithBrowser("chrome"))
 client, _ := stealth.NewClient(
-    stealth.WithProfile(stealth.RandomProfile()),
+    stealth.WithIdentity(stealth.BrowserIdentity{BrowserProfile: p}), // TLS profile + User-Agent together
 )
 body, headers, status, err := client.Do("GET", "https://example.com", nil, nil)
 ```
@@ -75,18 +77,19 @@ resp, err := client.StdClient().Get("https://example.com")
 client, _ := stealth.NewClient()
 client.Use(stealth.LoggingMiddleware)
 client.Use(stealth.RetryMiddleware(stealth.DefaultRetryConfig))
-client.Use(stealth.RateLimitMiddleware(ratelimit.NewLimiter(ratelimit.DefaultConfig)))
+client.Use(stealth.RateLimitMiddleware(ratelimit.NewDomainLimiter(
+    ratelimit.DomainConfig{Domain: "*.example.com", RequestsPerWindow: 30, WindowDuration: time.Minute},
+)))
 ```
 
 ### Rate Limiting
 
 ```go
-limiter := ratelimit.NewDomainLimiter(ratelimit.DomainConfig{
-    Rules: map[string]ratelimit.Config{
-        "api.example.com": {RequestsPerWindow: 10, WindowDuration: time.Minute},
-        "*.example.com":   {RequestsPerWindow: 30, WindowDuration: time.Minute},
-    },
-})
+// Rules are checked in order; the first matching rule wins.
+limiter := ratelimit.NewDomainLimiter(
+    ratelimit.DomainConfig{Domain: "api.example.com", RequestsPerWindow: 10, WindowDuration: time.Minute},
+    ratelimit.DomainConfig{Domain: "*.example.com", RequestsPerWindow: 30, WindowDuration: time.Minute},
+)
 limiter.Wait(ctx, "https://api.example.com/v1/users")
 ```
 
@@ -166,11 +169,32 @@ listener and pin the `chrome_131` wire byte for byte.
 
 ## Used By
 
-- [go-twitter](https://github.com/anatolykoptev/go-twitter) — Twitter/X scraping
-- [go-threads](https://github.com/anatolykoptev/go-threads) — Threads.net scraping
+- [go-twitter](https://github.com/anatolykoptev/go-twitter) — a Twitter/X client
+- [go-threads](https://github.com/anatolykoptev/go-threads) — a Threads client
 
 Plus private services in the same fleet: a web-search MCP server and a crypto-intelligence pipeline.
 
+## Configuration
+
+The library reads no configuration file. Everything is passed as options
+(`NewClient(...)`, `pool.Config`, `proxypool.WebshareConfig`). The only environment variable it
+reads itself is `INTERNAL_SERVICE_SECRET`, which `WithOxBrowser` sends as `X-Internal-Secret` to
+the ox-browser service when set (it is not sent through an external proxy). Names such as
+`WEBSHARE_API_KEY` in the examples are the caller's own.
+
+## Development
+
+```sh
+make preflight           # gofmt -s, go vet, build, race tests, then three non-race live tests
+make lint                # golangci-lint
+make fingerprint         # TLS/HTTP2 oracle, network, not part of preflight
+make fingerprint-wire    # wire check against real-browser captures, network
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and, for every document in the repository,
+[docs/INDEX.md](docs/INDEX.md). Releases and the changelog are produced by release-please from
+Conventional Commits.
+
 ## License
 
-MIT
+Apache-2.0, see [LICENSE](LICENSE).
