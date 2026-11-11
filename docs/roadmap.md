@@ -12,7 +12,7 @@
 | `ratelimit/` | 3 | 362 | Per-key sliding window + per-domain rate limiting with pluggable store |
 | `session/` | 2 | 281 | Session management with persistence (FileStore) |
 
-**Consumers**: go-search, go-hully (via go-twitter), go-job
+**Consumers**: go-search, go-twitter, go-job
 
 **Tags**: v0.1.0 → v0.2.0 → v0.3.0 → v0.4.0 → v0.5.0 → v0.6.0 → v1.0.0
 
@@ -192,7 +192,7 @@ type SessionStore interface {
 
 ## Non-Goals
 
-- **Full scraping framework** — we're a toolkit, not colly/geziyor
+- **Full crawling framework** — we're a toolkit, not colly/geziyor
 - **Headless browser** — out of scope, use playwright-go/chromedp/rod
 - **Cloudflare solver** — too target-specific, consumer responsibility
 - **Multi-lang FFI** — Go-only for now

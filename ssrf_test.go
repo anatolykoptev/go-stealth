@@ -260,7 +260,7 @@ func TestSSRFBlocked_NotRetriedUnderProxyRotation(t *testing.T) {
 		t.Fatalf("NewClient: %v", err)
 	}
 
-	_, _, _, err = client.Do(http.MethodGet, "http://10.8.0.1:8914/internal", nil, nil)
+	_, _, _, err = client.Do(http.MethodGet, "http://10.200.0.1:8914/internal", nil, nil)
 	if !errors.Is(err, ErrSSRFBlocked) {
 		t.Fatalf("expected ErrSSRFBlocked, got %v", err)
 	}
@@ -309,7 +309,7 @@ func TestDefaultDenyDial(t *testing.T) {
 		blocked bool
 	}{
 		{"169.254.169.254:80", true}, // cloud metadata (link-local)
-		{"10.8.0.1:8914", true},      // private (WireGuard go-grad)
+		{"10.200.0.1:8914", true},    // private (VPN-range host)
 		{"127.0.0.1:8080", true},     // loopback
 		{"192.168.1.1:80", true},     // private
 		{"0.0.0.0:80", true},         // unspecified
@@ -338,7 +338,7 @@ func TestDefaultDenyURL(t *testing.T) {
 		blocked bool
 	}{
 		{"http://169.254.169.254/latest/meta-data", true},
-		{"http://10.8.0.1:8914/ads", true},
+		{"http://10.200.0.1:8914/ads", true},
 		{"http://127.0.0.1:9000/", true},
 		{"https://[::1]/", true},
 		{"file:///etc/passwd", true},            // scheme not allowed
@@ -417,7 +417,7 @@ func TestAdaptRedirect(t *testing.T) {
 	}
 	adapted := adaptRedirect(guard)
 
-	target := mustURL(t, "http://10.8.0.1:8914/internal")
+	target := mustURL(t, "http://10.200.0.1:8914/internal")
 	fr := &fhttp.Request{Method: http.MethodGet, URL: target}
 	fvia := make([]*fhttp.Request, 3)
 
