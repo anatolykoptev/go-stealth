@@ -58,17 +58,37 @@ func RandomChromeUserAgent() string {
 // than a browser, in the RFC 9110 product form "name/version (+contact)". Use
 // it for plain net/http callers whose TLS handshake is Go's own: a browser
 // User-Agent over that handshake describes a client that is not there, and
-// an API that expects no browser needs none. version and contact may be empty;
-// characters that are not valid in a product token are replaced with '-'.
+// an API that expects no browser needs none.
+//
+// It sanitizes instead of returning an error, so the call stays a one-liner
+// and its result is always safe to put in a header, even for callers that
+// serialize headers themselves: name and version keep only RFC 9110 token
+// characters (anything else becomes '-'; an empty name becomes "go-client",
+// an empty version is omitted), and contact keeps only printable ASCII with
+// '(', ')' and '\' also replaced by '-', so control characters (CR, LF, NUL)
+// cannot end a header or close the comment. A contact that is empty after
+// trimming is omitted.
 func HonestUserAgent(name, version, contact string) string {
 	ua := productToken(name, "go-client")
 	if v := productToken(version, ""); v != "" {
 		ua += "/" + v
 	}
-	if contact != "" {
-		ua += " (+" + contact + ")"
+	if c := commentText(contact); c != "" {
+		ua += " (+" + c + ")"
 	}
 	return ua
+}
+
+// commentText makes s safe inside an RFC 9110 comment: printable ASCII only,
+// and no parenthesis or backslash.
+func commentText(s string) string {
+	out := []byte(s)
+	for i := 0; i < len(out); i++ {
+		if c := out[i]; c < 0x20 || c > 0x7e || c == '(' || c == ')' || c == '\\' {
+			out[i] = '-'
+		}
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // productToken keeps the RFC 9110 tchar set and maps anything else to '-'.
