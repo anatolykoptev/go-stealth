@@ -97,6 +97,10 @@ type BrowserClient struct {
 	// proxyAllow lets the dial guard pass the configured proxy's endpoint and
 	// nothing else; nil when no dial guard is installed.
 	proxyAllow *proxyAllowance
+
+	// maxBodyBytes is WithMaxBodyBytes; 0 = unbounded. doWithRetry enforces it
+	// on the finished response, whichever backend or middleware produced it.
+	maxBodyBytes int64
 }
 
 // ProxyPoolProvider returns the next proxy URL for rotation.
@@ -136,6 +140,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		HTTP3:              cfg.http3,
 		FetchMode:          cfg.fetchMode,
 		CookieJar:          cfg.cookieJar,
+		MaxBodyBytes:       cfg.maxBodyBytes,
 		InsecureSkipVerify: cfg.insecureSkipVerify,
 		DialControl:        dialControl,
 		RedirectGuard:      cfg.redirectGuard,
@@ -178,6 +183,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 		blockRetries:    cfg.blockRetries,
 		requestURLGuard: cfg.requestURLGuard,
 		proxyAllow:      proxyAllow,
+		maxBodyBytes:    cfg.maxBodyBytes,
 		identity:        resolveIdentity(cfg),
 		fetchMode:       cfg.fetchMode,
 	}
@@ -191,6 +197,7 @@ func NewClient(opts ...ClientOption) (*BrowserClient, error) {
 	if cfg.oxBrowserURL != "" {
 		oxProxyFn := oxBrowserProxyFn(cfg.proxyPool)
 		oxClient := newOxBrowserClientMaybeProxy(cfg.oxBrowserURL, oxProxyFn)
+		oxClient.maxReply = oxEnvelopeLimit(cfg.maxBodyBytes)
 		if cfg.cookieProvider == nil {
 			bc.Use(CloudflareCookieMiddleware(NewOxBrowserSolver(OxBrowserSolverConfig{
 				BaseURL: cfg.oxBrowserURL,
@@ -403,6 +410,14 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 			if errors.Is(err, ErrSSRFBlocked) {
 				return nil, nil, 0, err
 			}
+			// Likewise an oversized body is a verdict about the response, and
+			// the retry would pull another body of that size through a proxy.
+			if errors.Is(err, ErrBodyTooLarge) {
+				if resp != nil {
+					return nil, nil, resp.StatusCode, err
+				}
+				return nil, nil, 0, err
+			}
 			// A proxy 407 reaches here as a transport ERROR, not a response:
 			// both real backends tunnel through CONNECT and surface the
 			// rejection in err (the resp.StatusCode == 407 check below never
@@ -424,6 +439,13 @@ func (bc *BrowserClient) doWithRetry(req *Request, handler Handler) ([]byte, map
 				return nil, nil, resp.StatusCode, err
 			}
 			return nil, nil, 0, err
+		}
+
+		// The backend enforces the limit while reading; this catches what it
+		// cannot: a WithBackend backend that ignores BackendConfig, or a
+		// middleware that swapped in a larger body (the ox-browser fallback).
+		if bc.maxBodyBytes > 0 && int64(len(resp.Body)) > bc.maxBodyBytes {
+			return nil, nil, resp.StatusCode, bodyTooLarge(bc.maxBodyBytes)
 		}
 
 		// A 407 is the proxy rejecting its credentials — report it so a pool

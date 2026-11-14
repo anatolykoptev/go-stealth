@@ -29,6 +29,7 @@ type clientConfig struct {
 	fetchMode          bool
 	insecureSkipVerify bool
 	cookieJar          http.CookieJar // WithCookieJar; nil = backend default jar
+	maxBodyBytes       int64          // WithMaxBodyBytes; 0 = unbounded
 	blockRetries       int
 	cookieProvider     CookieProvider
 	oxBrowserURL       string
@@ -161,6 +162,35 @@ func WithTimeout(seconds int) ClientOption {
 	}
 }
 
+// WithMaxBodyBytes bounds the response body Do returns to n bytes, measured
+// after content-decoding (gzip, deflate, zstd). Reading stops at n+1 bytes:
+// a larger body is neither buffered nor drained, the connection is closed, and
+// Do returns an error that satisfies errors.Is(err, ErrBodyTooLarge). A
+// highly compressed body is stopped while it is being decoded, so a small
+// payload cannot expand past n. A body of exactly n bytes is returned whole.
+//
+// The limit covers every request the client makes: Do, DoCtx,
+// DoWithHeaderOrder, RoundTrip, each redirect hop's final response, and a
+// body replaced by the ox-browser fallback. The error is never retried on
+// another proxy. A backend from WithBackend is handed the limit in
+// BackendConfig.MaxBodyBytes and must enforce it itself, for example by
+// reading its body with ReadBodyLimit: the client's check on the finished
+// body only rejects it, it cannot prevent a backend that ignores the limit
+// from allocating the whole body first.
+//
+// n must be positive; NewClient returns an error otherwise. Without this
+// option the body is read in full, as before.
+func WithMaxBodyBytes(n int64) ClientOption {
+	return func(c *clientConfig) {
+		if n <= 0 {
+			c.buildErrors = append(c.buildErrors,
+				fmt.Errorf("stealth: WithMaxBodyBytes: limit must be positive, got %d", n))
+			return
+		}
+		c.maxBodyBytes = n
+	}
+}
+
 // WithHeaderOrder sets the default HTTP header ordering for requests.
 func WithHeaderOrder(order []string) ClientOption {
 	return func(c *clientConfig) {
@@ -193,6 +223,8 @@ func WithProxyPool(pool ProxyPoolProvider) ClientOption {
 
 // WithBackend sets a custom backend factory for creating the HTTPDoer.
 // If not set, the default bogdanfinn/tls-client backend is used.
+// The backend owns reading the response body, so it must honour
+// BackendConfig.MaxBodyBytes (WithMaxBodyBytes) itself; see ReadBodyLimit.
 func WithBackend(factory BackendFactory) ClientOption {
 	return func(c *clientConfig) {
 		c.backend = factory

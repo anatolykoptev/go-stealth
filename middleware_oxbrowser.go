@@ -2,6 +2,7 @@ package stealth
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
 
@@ -32,6 +33,9 @@ func SmartFetchMiddleware(oxClient *OxBrowserClient) Middleware {
 			)
 
 			oxResp, oxErr := oxClient.FetchSmart(context.Background(), req.URL)
+			if errors.Is(oxErr, ErrBodyTooLarge) {
+				return resp, oxErr
+			}
 			if oxErr != nil {
 				slog.Warn("smartfetch: ox-browser failed, returning original",
 					slog.Any("error", oxErr))
