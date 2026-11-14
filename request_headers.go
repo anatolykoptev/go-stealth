@@ -128,18 +128,7 @@ func (id BrowserIdentity) RequestHeaders(opts HeaderOptions) (RequestHeaders, er
 		return RequestHeaders{}, fmt.Errorf("stealth: unknown FetchMode %d", opts.Mode)
 	}
 
-	var order []string
-	for _, name := range defaultHeaderOrderFor(id, opts.Mode == FetchCORS) {
-		if _, ok := h[name]; ok {
-			order = append(order, name)
-		}
-	}
-	// A name the order table does not know goes last, so Order always covers Values.
-	for _, name := range slices.Sorted(maps.Keys(h)) {
-		if !slices.Contains(order, name) {
-			order = append(order, name)
-		}
-	}
+	order := orderFor(h, defaultHeaderOrderFor(id, opts.Mode == FetchCORS))
 	return RequestHeaders{Values: h, Order: order}, nil
 }
 
@@ -160,6 +149,33 @@ func (o HeaderOptions) site() (FetchSite, error) {
 // presents (see Identity), so the User-Agent, Client Hints and order always
 // agree with the TLS profile the client was built with. See
 // BrowserIdentity.RequestHeaders.
+//
+// Order is the order the client will actually send: its configured header
+// order (WithHeaderOrder, or the default for its identity and mode) filtered
+// to the generated names, not the identity's computed default.
 func (bc *BrowserClient) RequestHeaders(opts HeaderOptions) (RequestHeaders, error) {
-	return bc.Identity().RequestHeaders(opts)
+	rh, err := bc.Identity().RequestHeaders(opts)
+	if err != nil {
+		return rh, err
+	}
+	rh.Order = orderFor(rh.Values, bc.headerOrder)
+	return rh, nil
+}
+
+// orderFor returns base filtered to the names in h. A name base does not list
+// goes last in alphabetical order, as the transport appends it, so the result
+// always covers h.
+func orderFor(h map[string]string, base []string) []string {
+	var order []string
+	for _, name := range base {
+		if _, ok := h[name]; ok && !slices.Contains(order, name) {
+			order = append(order, name)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(h)) {
+		if !slices.Contains(order, name) {
+			order = append(order, name)
+		}
+	}
+	return order
 }

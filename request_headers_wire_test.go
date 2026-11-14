@@ -231,3 +231,29 @@ func TestRequestHeaders_NonChromiumRefused(t *testing.T) {
 		}
 	}
 }
+
+// The client reports the order it will send: a WithHeaderOrder set by the
+// caller, filtered to the generated names, not the identity's default.
+func TestBrowserClient_RequestHeaders_UsesConfiguredOrder(t *testing.T) {
+	c := loadWire(t, "google_chrome_156_nav.json")
+	id := capturedIdentity(t, c.HTTP2.Headers["user-agent"])
+	custom := []string{"user-agent", "x-not-generated", "accept", "priority", "sec-ch-ua"}
+	bc, err := NewClient(WithIdentity(id), WithHeaderOrder(custom), WithoutSSRFGuard())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = bc.Close() })
+	got, err := bc.RequestHeaders(HeaderOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"user-agent", "accept", "priority", "sec-ch-ua"}; !slices.Equal(got.Order[:len(want)], want) {
+		t.Errorf("order starts %v, want the configured %v first", got.Order, want)
+	}
+	if len(got.Order) != len(got.Values) {
+		t.Errorf("Order %v does not cover Values %v", got.Order, got.Values)
+	}
+	if slices.Contains(got.Order, "x-not-generated") {
+		t.Errorf("Order lists a header that was not generated: %v", got.Order)
+	}
+}
