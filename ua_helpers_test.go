@@ -46,6 +46,8 @@ func TestHonestUserAgent_NeutralisesInjection(t *testing.T) {
 		{"tool", "1.0", "caf\u00e9", "tool/1.0 (+caf--)"},
 		{"tool", "1.0", " \r\n ", "tool/1.0 (+--)"},
 		{"tool", "1.0", "   ", "tool/1.0"},
+		{"to\tol\x7f", "1\t0\x7f", "", "to-ol-/1-0-"},
+		{"tool", "1.0", "a\tb\x7fc", "tool/1.0 (+a-b-c)"},
 	} {
 		got := HonestUserAgent(tc.name, tc.version, tc.contact)
 		if got != tc.want {
