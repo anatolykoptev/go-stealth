@@ -167,6 +167,27 @@ per client because tls-client holds the HTTP/2 priority on the profile; build
 one client of each kind if you mix navigations and fetches. It needs a Chrome
 family profile and is opt-in for every profile, `chrome_131` included.
 
+## Request headers for an identity
+
+One place builds the browser request headers, so callers do not hand-copy a
+User-Agent, `sec-ch-ua` string or `accept` value that goes stale:
+
+- `stealth.DefaultProfile()` and `stealth.DefaultIdentity()` are what `NewClient()`
+  presents, without building a client.
+- `identity.RequestHeaders(stealth.HeaderOptions{...})` (or `client.RequestHeaders`)
+  returns the header values and their Chrome order for a navigation
+  (`FetchNavigate`) or a page `fetch()`/XMLHttpRequest (`FetchCORS`), with an
+  optional `AcceptLanguage`, `Site` and `OmitAcceptEncoding`. Pass `Order` to
+  `WithHeaderOrder`. The values and order are tested against the Chrome 156
+  captures in `testdata/wire`.
+- `identity.UserAgentData(fullVersion)` is the same brand list as structured
+  data (`brands`, `fullVersionList`) for a DevTools Protocol session.
+- `stealth.HonestUserAgent(name, version, contact)` names the calling program
+  for plain `net/http` callers whose TLS is Go's own.
+- `RandomUserAgent` and the package-level `ChromeHeaders` are deprecated: they
+  can name a browser other than the one the client's TLS fingerprint shows. Use
+  `RandomChromeUserAgent` or the client's `Identity()`.
+
 ## Wire check against a real browser
 
 `make fingerprint-wire` (build tag `wirelive`, network required, unreachable
