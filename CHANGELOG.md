@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.29.0](https://github.com/anatolykoptev/go-stealth/compare/v1.28.2...v1.29.0) (2026-11-14)
+
+
+### Added
+
+* WithMaxBodyBytes bounds the response body ([#92](https://github.com/anatolykoptev/go-stealth/issues/92)) ([6e22e4c](https://github.com/anatolykoptev/go-stealth/commit/6e22e4c074e90c6d7d2d6d259b37213b4a83cc6c))
+
 ## [1.28.2](https://github.com/anatolykoptev/go-stealth/compare/v1.28.1...v1.28.2) (2026-11-11)
 
 
