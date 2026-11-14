@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.30.0](https://github.com/anatolykoptev/go-stealth/compare/v1.29.0...v1.30.0) (2026-11-14)
+
+
+### Added
+
+* canonical identity API (DefaultIdentity, RequestHeaders, UserAgentData, HonestUserAgent) ([#95](https://github.com/anatolykoptev/go-stealth/issues/95)) ([0e68be2](https://github.com/anatolykoptev/go-stealth/commit/0e68be2beb0d313ca6150d329305353e53bdb600))
+
 ## [1.29.0](https://github.com/anatolykoptev/go-stealth/compare/v1.28.2...v1.29.0) (2026-11-14)
 
 
