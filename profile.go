@@ -412,6 +412,22 @@ func ClientHintsHeaders(ua string) map[string]string {
 // secChUa renders the sec-ch-ua value for a Chromium major, mirroring
 // Chromium's GetGreasedUserAgentBrandVersion + GetRandomOrder(3).
 func secChUa(major, brand, brandVersion string) string {
+	list := brandList(major, brand, major, brandVersion, "")
+	parts := make([]string, len(list))
+	for i, b := range list {
+		parts[i] = fmt.Sprintf(`"%s";v="%s"`, b.Brand, b.Version)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// brandList returns the three entries of a Chromium brand list in Chromium's
+// seeded order: a GREASE brand, "Chromium" and the browser brand. major seeds
+// the GREASE brand and the order; chromiumVersion and brandVersion are the
+// versions printed for the other two. The GREASE entry carries its own
+// version with greaseSuffix appended (empty for sec-ch-ua, ".0.0.0" for the
+// full version list, as Chromium prints it). It is the single source for
+// sec-ch-ua and for UserAgentData, so the two cannot disagree.
+func brandList(major, brand, chromiumVersion, brandVersion, greaseSuffix string) [3]UserAgentBrand {
 	seed, err := strconv.Atoi(major)
 	if err != nil || seed < 0 {
 		seed = 0
@@ -420,16 +436,16 @@ func secChUa(major, brand, brandVersion string) string {
 	greaseVersions := [...]string{"8", "99", "24"}
 	orders := [6][3]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
 
-	entries := [3]string{
-		fmt.Sprintf(`"Not%sA%sBrand";v="%s"`, greaseChars[seed%len(greaseChars)], greaseChars[(seed+1)%len(greaseChars)], greaseVersions[seed%len(greaseVersions)]),
-		fmt.Sprintf(`"Chromium";v="%s"`, major),
-		fmt.Sprintf(`"%s";v="%s"`, brand, brandVersion),
+	entries := [3]UserAgentBrand{
+		{Brand: fmt.Sprintf("Not%sA%sBrand", greaseChars[seed%len(greaseChars)], greaseChars[(seed+1)%len(greaseChars)]), Version: greaseVersions[seed%len(greaseVersions)] + greaseSuffix},
+		{Brand: "Chromium", Version: chromiumVersion},
+		{Brand: brand, Version: brandVersion},
 	}
-	var out [3]string
+	var out [3]UserAgentBrand
 	for i, pos := range orders[seed%len(orders)] {
 		out[pos] = entries[i]
 	}
-	return strings.Join(out[:], ", ")
+	return out
 }
 
 // ExtractChromeVersion extracts the major Chrome version from a User-Agent string.
