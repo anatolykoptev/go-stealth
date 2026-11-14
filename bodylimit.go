@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strings"
 )
 
 // ErrBodyTooLarge is returned (wrapped; match it with errors.Is) when a
@@ -37,18 +36,28 @@ func readAllLimit(r io.Reader, limit int64) ([]byte, error) {
 	return b, err
 }
 
+// ReadBodyLimit is io.ReadAll bounded by limit, for a custom backend (see
+// WithBackend) to read its response body with: it stops at limit+1 bytes and
+// returns an error wrapping ErrBodyTooLarge when the source has more than limit
+// bytes, without buffering the rest. Pass BackendConfig.MaxBodyBytes as the
+// limit; a limit <= 0 reads without a bound. Close the body unread afterwards,
+// so the connection is dropped rather than drained.
+func ReadBodyLimit(r io.Reader, limit int64) ([]byte, error) {
+	return readAllLimit(r, limit)
+}
+
 // wireLimit is how many bytes to read off the wire for a body whose decoded
-// size must not pass limit. An identity body is its own decoded form, so the
-// limit applies as is. A content-coded body gets a small allowance for the
-// coding's framing, so that an incompressible body of exactly limit bytes is
-// not refused for its encoder's overhead; decodeBody then enforces limit on
-// the decoded bytes.
+// size must not pass limit. An identity body, and one in a coding this package
+// does not decode (br, an unknown name), is its own decoded form, so the limit
+// applies as is. A body in a coding it does decode (gzip, deflate, zstd) gets a
+// small allowance for the coding's framing, so that an incompressible body of
+// exactly limit bytes is not refused for its encoder's overhead; decodeBody
+// then enforces limit on the decoded bytes.
 func wireLimit(limit int64, contentEncoding string) int64 {
 	if limit <= 0 {
 		return 0
 	}
-	enc := strings.ToLower(strings.TrimSpace(contentEncoding))
-	if enc == "" || enc == "identity" {
+	if !decodesEncoding(contentEncoding) {
 		return limit
 	}
 	return satAdd(limit, limit>>8+1024)

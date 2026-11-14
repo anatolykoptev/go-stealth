@@ -59,8 +59,10 @@ type BackendConfig struct {
 	// MaxBodyBytes, when > 0, bounds the decoded response body (see
 	// WithMaxBodyBytes): a backend must stop reading at MaxBodyBytes+1 bytes,
 	// close the connection and return an error wrapping ErrBodyTooLarge.
-	// 0 = unbounded. A backend that ignores it is still held to the limit by
-	// the client, after the fact.
+	// 0 = unbounded. A custom backend must enforce it itself (ReadBodyLimit
+	// bounds a read in one call): the client's check after the backend
+	// returns only rejects an oversized body, it cannot stop the backend
+	// from allocating it.
 	MaxBodyBytes int64
 
 	// newHTTPClient is a per-client test seam for the tls-client constructor

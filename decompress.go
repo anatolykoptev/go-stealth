@@ -40,6 +40,14 @@ func decompressBody(data []byte, contentEncoding string) ([]byte, error) {
 	return decompressBodyLimit(data, contentEncoding, 0)
 }
 
+// decodesEncoding reports whether decompressBodyLimit decodes the given
+// Content-Encoding by name (header-stripped bodies are found by magic bytes
+// instead and get no such allowance).
+func decodesEncoding(contentEncoding string) bool {
+	enc := strings.ToLower(contentEncoding)
+	return strings.Contains(enc, "gzip") || strings.Contains(enc, "deflate") || strings.Contains(enc, "zstd")
+}
+
 // decompressBodyLimit is decompressBody with a bound on the decoded size:
 // limit > 0 stops decoding at limit+1 bytes and returns ErrBodyTooLarge
 // instead of buffering the rest. limit <= 0 means unbounded.

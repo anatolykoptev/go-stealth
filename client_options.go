@@ -173,8 +173,10 @@ func WithTimeout(seconds int) ClientOption {
 // DoWithHeaderOrder, RoundTrip, each redirect hop's final response, and a
 // body replaced by the ox-browser fallback. The error is never retried on
 // another proxy. A backend from WithBackend is handed the limit in
-// BackendConfig.MaxBodyBytes; if it ignores it, the client still rejects the
-// finished body.
+// BackendConfig.MaxBodyBytes and must enforce it itself, for example by
+// reading its body with ReadBodyLimit: the client's check on the finished
+// body only rejects it, it cannot prevent a backend that ignores the limit
+// from allocating the whole body first.
 //
 // n must be positive; NewClient returns an error otherwise. Without this
 // option the body is read in full, as before.
@@ -221,6 +223,8 @@ func WithProxyPool(pool ProxyPoolProvider) ClientOption {
 
 // WithBackend sets a custom backend factory for creating the HTTPDoer.
 // If not set, the default bogdanfinn/tls-client backend is used.
+// The backend owns reading the response body, so it must honour
+// BackendConfig.MaxBodyBytes (WithMaxBodyBytes) itself; see ReadBodyLimit.
 func WithBackend(factory BackendFactory) ClientOption {
 	return func(c *clientConfig) {
 		c.backend = factory

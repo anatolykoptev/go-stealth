@@ -74,6 +74,8 @@ _, _, _, err := client.Do("GET", "https://example.com/big", nil, nil)
 if errors.Is(err, stealth.ErrBodyTooLarge) { /* skip it */ }
 ```
 
+A custom backend (`WithBackend`) must enforce `BackendConfig.MaxBodyBytes` itself; the client's check after the backend returns only rejects an oversized body, it cannot prevent the allocation. `stealth.ReadBodyLimit(resp.Body, cfg.MaxBodyBytes)` is a drop-in for `io.ReadAll` that does this.
+
 ### As http.RoundTripper
 
 ```go
