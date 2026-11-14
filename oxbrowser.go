@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -18,6 +17,11 @@ import (
 type OxBrowserClient struct {
 	baseURL string
 	client  *http.Client
+
+	// maxReply bounds one reply read from ox-browser (0 = unbounded). Set by
+	// NewClient from WithMaxBodyBytes: a /fetch-smart reply carries a whole
+	// page body inside its JSON.
+	maxReply int64
 }
 
 // NewOxBrowserClient creates a client for ox-browser at the given base URL.
@@ -152,7 +156,7 @@ func (c *OxBrowserClient) post(ctx context.Context, path string, body []byte, ou
 	}
 	defer resp.Body.Close() //nolint:errcheck // deferred close, error unrecoverable
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := readAllLimit(resp.Body, c.maxReply)
 	if err != nil {
 		return fmt.Errorf("ox-browser: read response: %w", err)
 	}

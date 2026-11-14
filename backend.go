@@ -56,6 +56,13 @@ type BackendConfig struct {
 	// backend). It must re-own the redirect hop cap.
 	RedirectGuard func(req *http.Request, via []*http.Request) error
 
+	// MaxBodyBytes, when > 0, bounds the decoded response body (see
+	// WithMaxBodyBytes): a backend must stop reading at MaxBodyBytes+1 bytes,
+	// close the connection and return an error wrapping ErrBodyTooLarge.
+	// 0 = unbounded. A backend that ignores it is still held to the limit by
+	// the client, after the fact.
+	MaxBodyBytes int64
+
 	// newHTTPClient is a per-client test seam for the tls-client constructor
 	// (nil = tls_client.NewHttpClient). Unexported, so callers cannot set it.
 	newHTTPClient tlsHTTPClientFactory

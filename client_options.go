@@ -29,6 +29,7 @@ type clientConfig struct {
 	fetchMode          bool
 	insecureSkipVerify bool
 	cookieJar          http.CookieJar // WithCookieJar; nil = backend default jar
+	maxBodyBytes       int64          // WithMaxBodyBytes; 0 = unbounded
 	blockRetries       int
 	cookieProvider     CookieProvider
 	oxBrowserURL       string
@@ -158,6 +159,33 @@ func WithCookieJar(jar http.CookieJar) ClientOption {
 func WithTimeout(seconds int) ClientOption {
 	return func(c *clientConfig) {
 		c.timeout = seconds
+	}
+}
+
+// WithMaxBodyBytes bounds the response body Do returns to n bytes, measured
+// after content-decoding (gzip, deflate, zstd). Reading stops at n+1 bytes:
+// a larger body is neither buffered nor drained, the connection is closed, and
+// Do returns an error that satisfies errors.Is(err, ErrBodyTooLarge). A
+// highly compressed body is stopped while it is being decoded, so a small
+// payload cannot expand past n. A body of exactly n bytes is returned whole.
+//
+// The limit covers every request the client makes: Do, DoCtx,
+// DoWithHeaderOrder, RoundTrip, each redirect hop's final response, and a
+// body replaced by the ox-browser fallback. The error is never retried on
+// another proxy. A backend from WithBackend is handed the limit in
+// BackendConfig.MaxBodyBytes; if it ignores it, the client still rejects the
+// finished body.
+//
+// n must be positive; NewClient returns an error otherwise. Without this
+// option the body is read in full, as before.
+func WithMaxBodyBytes(n int64) ClientOption {
+	return func(c *clientConfig) {
+		if n <= 0 {
+			c.buildErrors = append(c.buildErrors,
+				fmt.Errorf("stealth: WithMaxBodyBytes: limit must be positive, got %d", n))
+			return
+		}
+		c.maxBodyBytes = n
 	}
 }
 

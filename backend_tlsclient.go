@@ -3,7 +3,6 @@ package stealth
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -27,6 +26,10 @@ type tlsClientDoer struct {
 	// applied to client ("" = direct), so an unchanged SetProxy can be skipped.
 	proxyMu sync.Mutex
 	proxy   string
+
+	// maxBody bounds the decoded response body (0 = unbounded); see
+	// BackendConfig.MaxBodyBytes.
+	maxBody int64
 }
 
 // newTLSClientBackend creates an HTTPDoer backed by bogdanfinn/tls-client.
@@ -104,7 +107,7 @@ func newTLSClientBackend(cfg BackendConfig) (HTTPDoer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tls-client init: %w", err)
 	}
-	return &tlsClientDoer{client: client, proxy: cfg.ProxyURL}, nil
+	return &tlsClientDoer{client: client, proxy: cfg.ProxyURL, maxBody: cfg.MaxBodyBytes}, nil
 }
 
 // adaptRedirect bridges the stdlib-typed RedirectGuard into the fhttp-typed
@@ -165,8 +168,10 @@ func (t *tlsClientDoer) Do(req *Request) (*Response, error) {
 	}
 	defer resp.Body.Close()
 
-	rawData, readErr := io.ReadAll(resp.Body)
-	if readErr != nil && len(rawData) == 0 {
+	// Closing an unread body (deferred above) drops the connection instead of
+	// draining it, so an oversized body stops costing bytes at the limit.
+	rawData, readErr := readAllLimit(resp.Body, wireLimit(t.maxBody, resp.Header.Get("Content-Encoding")))
+	if errors.Is(readErr, ErrBodyTooLarge) || (readErr != nil && len(rawData) == 0) {
 		return &Response{StatusCode: resp.StatusCode}, fmt.Errorf("read body: %w", readErr)
 	}
 	// Partial read (e.g. brotli decode error mid-stream) — use what we got.
@@ -180,7 +185,7 @@ func (t *tlsClientDoer) Do(req *Request) (*Response, error) {
 		}
 	}
 
-	data, err := decompressBody(rawData, respHeaders["content-encoding"])
+	data, err := decodeBody(rawData, respHeaders["content-encoding"], t.maxBody)
 	if err != nil {
 		return &Response{StatusCode: resp.StatusCode}, fmt.Errorf("decompress body: %w", err)
 	}

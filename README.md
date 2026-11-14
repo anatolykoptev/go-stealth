@@ -64,6 +64,16 @@ pool, _ := proxypool.NewWebshareRotating(os.Getenv("WEBSHARE_USER"), os.Getenv("
 
 The pool round-robins across all entries. With multiple countries, each base proxy is duplicated per country so rotations naturally spread across geographies.
 
+### Bounding the Response Body
+
+`Do` buffers the whole body. `WithMaxBodyBytes` caps it, measured after gzip, deflate and zstd decoding: reading stops one byte past the cap, the connection is closed, and `Do` returns an error that matches `errors.Is(err, stealth.ErrBodyTooLarge)`. A small compressed payload that expands past the cap is stopped while it decodes.
+
+```go
+client, _ := stealth.NewClient(stealth.WithMaxBodyBytes(10 << 20))
+_, _, _, err := client.Do("GET", "https://example.com/big", nil, nil)
+if errors.Is(err, stealth.ErrBodyTooLarge) { /* skip it */ }
+```
+
 ### As http.RoundTripper
 
 ```go
