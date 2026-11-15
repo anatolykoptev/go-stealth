@@ -1,0 +1,14 @@
+{
+ "desktop_os": [
+  "linux",
+  "macos",
+  "windows"
+ ],
+ "browser_http": [
+  "chrome/146.0.0.0|2",
+  "chrome/150.0.0.0|2",
+  "chrome/152.0.0.0|2",
+  "chrome/156.0.0.0|2",
+  "edge/152.0.0.0|2"
+ ]
+}

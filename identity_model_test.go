@@ -410,3 +410,74 @@ func TestMinWeightFloor(t *testing.T) {
 		t.Errorf("floor above every weight: err = %v, want ErrNoIdentity", err)
 	}
 }
+
+func TestAcceptLanguageCanonicalCase(t *testing.T) {
+	for in, want := range map[string]string{
+		"en-us":      "en-US,en;q=0.9",
+		"EN-US":      "en-US,en;q=0.9",
+		"DE-de":      "de-DE,de;q=0.9",
+		"zh-hant-tw": "zh-Hant-TW,zh;q=0.9",
+		"ES-419":     "es-419,es;q=0.9",
+		"FR":         "fr",
+	} {
+		if got, err := acceptLanguageFor(in); err != nil || got != want {
+			t.Errorf("%s = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	g, err := GenerateIdentity(3, Constraints{Locales: []string{"pt-br"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Locale != "pt-BR" || g.AcceptLanguage != "pt-BR,pt;q=0.9" {
+		t.Errorf("locale %q, accept-language %q", g.Locale, g.AcceptLanguage)
+	}
+}
+
+// PoolVersion must move whenever the set of candidate entries moves, because
+// it is what tells a caller that re-deriving from a seed may land elsewhere.
+func TestPoolVersionTracksTheProfileSet(t *testing.T) {
+	c := Constraints{MinWeight: -1} // keep the added cell above any floor
+	before, err := IdentityPoolVersion(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, _ := GenerateIdentity(1, c)
+	if g.PoolVersion != before {
+		t.Fatalf("GeneratedIdentity.PoolVersion %s != IdentityPoolVersion %s", g.PoolVersion, before)
+	}
+	again, _ := IdentityPoolVersion(c)
+	if again != before {
+		t.Fatal("PoolVersion is not stable across calls")
+	}
+
+	saved := BuiltinProfiles
+	t.Cleanup(func() { BuiltinProfiles = saved })
+
+	// A new cell: Edge 156 on Linux, which the model knows.
+	edgeLinux := BrowserProfile{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+		TLSProfile: ProfileChrome156, Browser: "edge", OS: "linux",
+	}
+	BuiltinProfiles = append(append([]BrowserProfile(nil), saved...), edgeLinux)
+	added, err := IdentityPoolVersion(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added == before {
+		t.Fatal("adding a profile cell did not change PoolVersion")
+	}
+
+	// A changed entry in an existing cell (a different User-Agent string).
+	changed := append([]BrowserProfile(nil), saved...)
+	changed[0].UserAgent += " "
+	BuiltinProfiles = changed
+	if v, _ := IdentityPoolVersion(c); v == before {
+		t.Fatal("editing an entry did not change PoolVersion")
+	}
+	BuiltinProfiles = saved
+
+	// The floor is part of the version.
+	if v, _ := IdentityPoolVersion(Constraints{MinWeight: 0.02}); v == before {
+		t.Fatal("changing the floor did not change PoolVersion")
+	}
+}

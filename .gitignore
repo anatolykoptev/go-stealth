@@ -2,3 +2,4 @@
 *.env.local
 .env.*
 secrets/
+internal/identitymodel/testdata/oracle/node_modules/

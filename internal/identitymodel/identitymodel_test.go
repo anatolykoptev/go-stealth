@@ -219,3 +219,42 @@ func TestSampleIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// Encode must round-trip through Parse without changing a probability, and
+// keep one CPT subtree per line.
+func TestEncodeRoundTrip(t *testing.T) {
+	f, err := Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc, err := f.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := Parse(enc)
+	if err != nil {
+		t.Fatalf("encoded model does not parse: %v", err)
+	}
+	if g.Source != f.Source {
+		t.Fatalf("source changed: %+v", g.Source)
+	}
+	a, b := f.Networks["input"].Distribution(nil), g.Networks["input"].Distribution(nil)
+	if len(a) != len(b) {
+		t.Fatalf("outcomes %d != %d", len(a), len(b))
+	}
+	for i := range a {
+		if a[i].P != b[i].P || cellKey(a[i].Values) != cellKey(b[i].Values) {
+			t.Fatalf("outcome %d changed", i)
+		}
+	}
+	if lines := strings.Count(string(enc), "\n"); lines < 200 {
+		t.Fatalf("only %d lines: the file is not laid out for review", lines)
+	}
+	if string(modelJSON) != string(enc) {
+		t.Fatal("model.json is not in Encode's layout; regenerate it with cmd/identity-model-import")
+	}
+	again, _ := g.Encode()
+	if string(again) != string(enc) {
+		t.Fatal("Encode is not a fixed point")
+	}
+}

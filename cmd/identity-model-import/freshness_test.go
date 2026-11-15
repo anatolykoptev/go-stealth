@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -73,5 +76,27 @@ func TestCheckFreshRefusesStaleAndIncomplete(t *testing.T) {
 				t.Fatalf("err = %v, want it to mention %q", err, c.wantErr)
 			}
 		})
+	}
+}
+
+// testdata/oracle/pool.json is what the upstream oracle script constrains its
+// draws to. It is derived from the built-in profiles, so a profile added to
+// the library that the file does not list fails here instead of silently
+// escaping the oracle.
+func TestOraclePoolFileMatchesBuiltinProfiles(t *testing.T) {
+	want, err := buildPoolFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile("../../internal/identitymodel/testdata/oracle/pool.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got poolFile
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("pool.json = %+v, built-in profiles give %+v; run go run ./cmd/identity-model-import -pool-out internal/identitymodel/testdata/oracle/pool.json", got, want)
 	}
 }

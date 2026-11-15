@@ -1,0 +1,9 @@
+{
+  "name": "identity-model-oracle",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Runs the upstream sampler to produce testdata/apify_reference.json",
+  "dependencies": {
+    "generative-bayesian-network": "2.1.90"
+  }
+}

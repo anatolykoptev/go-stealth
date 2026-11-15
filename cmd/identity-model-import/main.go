@@ -11,6 +11,10 @@
 // pass the freshness guard (see checkFresh): a stale or incomplete model is
 // refused and nothing is written.
 //
+// With -pool-out it writes the model values the default pool can reach, which
+// the upstream oracle script reads as its constraints, so a profile added to
+// the library reaches the oracle without anyone editing a list.
+//
 // With -print and no other flag it lists the shipped model's version, the
 // Chrome majors it knows and the default identity distribution, which the
 // refresh job diffs before and after an import.
@@ -44,10 +48,18 @@ func main() {
 	pkg := flag.String("package", "", "npm package the file was taken from, e.g. header-generator@2.1.90")
 	committed := flag.String("committed", "", "upstream commit or release date, YYYY-MM-DD")
 	out := flag.String("out", "", "model file to write")
+	poolOut := flag.String("pool-out", "", "write the default pool's model values (the oracle script's constraints) to this file, then exit")
 	print := flag.Bool("print", false, "print the shipped model's version, Chrome majors and default distribution, then exit")
 	flag.Parse()
 	if *print {
 		if err := printSummary(os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "identity-model-import:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *poolOut != "" {
+		if err := writePool(*poolOut); err != nil {
 			fmt.Fprintln(os.Stderr, "identity-model-import:", err)
 			os.Exit(1)
 		}
@@ -112,18 +124,22 @@ func run(in, commit, pkg, committed, out string) error {
 		},
 		Networks: map[string]*identitymodel.Network{"input": nw},
 	}
-	enc, err := json.Marshal(f)
+	compact, err := json.Marshal(f)
 	if err != nil {
 		return err
 	}
-	parsed, err := identitymodel.Parse(enc)
+	parsed, err := identitymodel.Parse(compact)
 	if err != nil {
 		return fmt.Errorf("converted model does not validate: %w", err)
+	}
+	enc, err := parsed.Encode()
+	if err != nil {
+		return err
 	}
 	if err := checkFresh(parsed, stealth.BuiltinProfiles); err != nil {
 		return fmt.Errorf("refusing to import: %w", err)
 	}
-	return os.WriteFile(out, append(enc, '\n'), 0o644)
+	return os.WriteFile(out, enc, 0o644)
 }
 
 func convertNode(sn srcNode) (*identitymodel.Node, error) {

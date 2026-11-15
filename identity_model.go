@@ -3,6 +3,7 @@ package stealth
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -23,7 +24,11 @@ type Constraints struct {
 	// Profiles lists the TLS profiles an identity may ride. Empty means the
 	// profiles of BuiltinProfiles. A profile outside BuiltinProfiles (for
 	// example a legacy one) is used only when listed here, so a frozen
-	// profile is never drawn by accident.
+	// profile is never drawn by accident. A listed profile the model has no
+	// entry for contributes nothing: Brave (it sends a Chrome User-Agent, so
+	// the model cannot tell it apart), and Firefox or Safari whenever the
+	// model lacks their exact version. When no listed profile has an entry,
+	// the call returns ErrNoIdentity.
 	Profiles []TLSProfile `json:"profiles,omitempty"`
 	// OS limits the operating systems ("windows", "macos", "linux",
 	// "android", "ios"). Empty means all.
@@ -33,7 +38,8 @@ type Constraints struct {
 	// were measured as desktop Chrome.
 	IncludeMobile bool `json:"include_mobile,omitempty"`
 	// Locales lists the locales to pick the accept-language from, as BCP 47
-	// tags such as "de-DE". The model does not cover language; the pick is
+	// tags such as "de-DE"; case is normalised ("en-us" becomes "en-US"). The
+	// model does not cover language; the pick is
 	// uniform and seeded. Empty means "en-US".
 	Locales []string `json:"locales,omitempty"`
 	// MinWeight is the smallest probability an identity may have. An
@@ -60,16 +66,27 @@ func (c Constraints) minWeight() float64 {
 
 // GeneratedIdentity is a BrowserIdentity together with the request language
 // drawn for it.
+//
+// Only GeneratedIdentity.RequestHeaders applies AcceptLanguage. Passing
+// g.BrowserIdentity to WithIdentity, or building headers with
+// BrowserClient.RequestHeaders, drops it: those see the plain BrowserIdentity
+// and fall back to en-US unless HeaderOptions.AcceptLanguage is set from
+// g.AcceptLanguage.
 type GeneratedIdentity struct {
 	BrowserIdentity
 	// Locale is the drawn locale tag.
 	Locale string
 	// AcceptLanguage is the accept-language value for Locale.
 	AcceptLanguage string
-	// ModelVersion labels the model data the identity was drawn from. The
-	// same seed under another ModelVersion can give another identity, so a
-	// caller that needs an identity to stay put must store it, not the seed.
+	// ModelVersion labels the model data the identity was drawn from.
 	ModelVersion string
+	// PoolVersion labels the set of identities the draw chose among: a hash
+	// of every candidate entry (OS, device, model value, TLS profile,
+	// User-Agent) after the constraints and the weight floor, and of the
+	// floor. A change to the built-in profile set, to DefaultMinWeight or to
+	// the constraints changes it. It is a label of this implementation, not
+	// something another language reproduces.
+	PoolVersion string
 }
 
 // RequestHeaders is BrowserIdentity.RequestHeaders with AcceptLanguage filled
@@ -90,17 +107,34 @@ type WeightedIdentity struct {
 // IdentitySeed turns a stable key (an account id, a session id) into a seed.
 // It is the first eight bytes of the key's SHA-256, big-endian, so any
 // language reproduces it.
+//
+// A seed is not an identity. What GenerateIdentity returns for a seed depends
+// on the model data, the built-in profile set and the weight floor, all of
+// which change in library upgrades. Persist the identity you draw and render
+// from the stored value; never re-derive it from the seed after an upgrade.
 func IdentitySeed(key string) uint64 {
 	h := sha256.Sum256([]byte(key))
 	return binary.BigEndian.Uint64(h[:8])
 }
 
 // GenerateIdentity draws one browser identity from a model of real browser
-// traffic, restricted to identities a built-in TLS profile backs. The same
-// seed and constraints always give the same identity under one ModelVersion.
+// traffic, restricted to identities a built-in TLS profile backs.
+//
+// PERSIST THE RESULT. Do not store the seed and call this again later: the
+// same seed and constraints give the same identity only while the model data
+// (GeneratedIdentity.ModelVersion), the pool of candidate entries
+// (GeneratedIdentity.PoolVersion; it moves whenever BuiltinProfiles or the
+// weight floor change) and the algorithm are unchanged, and a library upgrade
+// can change any of them. Store the drawn identity, for example its TLS
+// profile, OS and locale, and render from that. IdentityPoolVersion lets a
+// caller see in advance whether a seed would still land where it did.
 //
 // The model chooses which built-in entry (browser, major version, OS) is
-// presented, in proportion to its share of observed traffic. It never supplies
+// presented. The draw follows the model's level-wise distribution, as the
+// upstream sampler does: device, then OS given the device, then browser given
+// both, each renormalised over what the pool allows at that step. It is not
+// the model's joint distribution conditioned on the pool, so a constraint on
+// one level does not reweight the levels above it. The model never supplies
 // strings: the User-Agent, Client Hints and header values come from the
 // built-in entry, so the captured Chrome 156 values stay authoritative.
 //
@@ -129,6 +163,10 @@ func GenerateIdentity(seed uint64, c Constraints) (GeneratedIdentity, error) {
 		locales = []string{"en-US"}
 	}
 	locale := locales[int(r.Float64()*float64(len(locales)))]
+	locale, err = canonicalLocale(locale)
+	if err != nil {
+		return GeneratedIdentity{}, err
+	}
 	al, err := acceptLanguageFor(locale)
 	if err != nil {
 		return GeneratedIdentity{}, err
@@ -138,7 +176,23 @@ func GenerateIdentity(seed uint64, c Constraints) (GeneratedIdentity, error) {
 		Locale:          locale,
 		AcceptLanguage:  al,
 		ModelVersion:    f.Source.Version(),
+		PoolVersion:     pool.version(c.minWeight()),
 	}, nil
+}
+
+// IdentityPoolVersion returns the PoolVersion a draw under c would carry,
+// without drawing. Compare it with the PoolVersion stored beside an identity
+// to learn whether the candidate set has changed since.
+func IdentityPoolVersion(c Constraints) (string, error) {
+	f, err := identitymodel.Default()
+	if err != nil {
+		return "", err
+	}
+	pool, err := buildPool(f, c)
+	if err != nil {
+		return "", err
+	}
+	return pool.version(c.minWeight()), nil
 }
 
 // IdentityDistribution returns every identity GenerateIdentity can draw under
@@ -222,6 +276,19 @@ func buildPool(f *identitymodel.File, c Constraints) (*identityPool, error) {
 		delete(pool.byCell, lightest)
 		pool.rebuildCells()
 	}
+}
+
+// version hashes every cell of the pool with the entry behind it, and the
+// floor, into a short label.
+func (p *identityPool) version(floor float64) string {
+	lines := make([]string, 0, len(p.byCell)+1)
+	for k, bp := range p.byCell {
+		lines = append(lines, strings.Join([]string{k.os, k.device, k.browserHTTP, string(bp.TLSProfile), bp.Browser, bp.UserAgent}, "|"))
+	}
+	sort.Strings(lines)
+	lines = append(lines, fmt.Sprintf("floor=%g", floor))
+	h := sha256.Sum256([]byte(strings.Join(lines, "\n")))
+	return hex.EncodeToString(h[:6])
 }
 
 func cellLess(a, b poolCell) bool {
@@ -351,13 +418,47 @@ func modelBrowserValue(bp BrowserProfile) (string, bool) {
 	return "", false
 }
 
-var reLocaleTag = regexp.MustCompile(`^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
+var reLocaleTag = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
 
-// acceptLanguageFor renders Chrome's accept-language for a single-language
-// browser: "de-DE" gives "de-DE,de;q=0.9", "de" gives "de".
-func acceptLanguageFor(tag string) (string, error) {
+// canonicalLocale writes a BCP 47 tag the way browsers do: language in lower
+// case, a four-letter script in title case, a two-letter region in upper case,
+// anything else in lower case. "en-us" and "EN-US" both become "en-US".
+func canonicalLocale(tag string) (string, error) {
 	if !reLocaleTag.MatchString(tag) {
 		return "", fmt.Errorf("stealth: invalid locale tag %q", tag)
+	}
+	parts := strings.Split(tag, "-")
+	for i, p := range parts {
+		switch {
+		case i == 0:
+			parts[i] = strings.ToLower(p)
+		case len(p) == 4 && isAlpha(p):
+			parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+		case len(p) == 2 && isAlpha(p):
+			parts[i] = strings.ToUpper(p)
+		default:
+			parts[i] = strings.ToLower(p)
+		}
+	}
+	return strings.Join(parts, "-"), nil
+}
+
+func isAlpha(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// acceptLanguageFor renders Chrome's accept-language for a single-language
+// browser: "de-DE" gives "de-DE,de;q=0.9", "de" gives "de". The tag is
+// canonicalised first.
+func acceptLanguageFor(tag string) (string, error) {
+	tag, err := canonicalLocale(tag)
+	if err != nil {
+		return "", err
 	}
 	lang, _, regional := strings.Cut(tag, "-")
 	if !regional {
