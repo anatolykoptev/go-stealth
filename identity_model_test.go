@@ -486,14 +486,24 @@ func TestPoolVersionTracksTheProfileSet(t *testing.T) {
 	BuiltinProfiles = saved
 
 	// The floor acts through the pool it leaves. A floor that prunes a cell
-	// changes the version; floors that prune nothing do not.
+	// changes the version; floors below the lightest cell prune nothing and do
+	// not. The lightest weight is read from the pool, not assumed, so a model
+	// refresh cannot invalidate the test.
+	all, err := IdentityDistribution(Constraints{MinWeight: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lightest := all[len(all)-1].Weight // sorted heaviest first
+	if DefaultMinWeight <= lightest {
+		t.Skipf("the default floor %.4f prunes nothing: the lightest cell weighs %.4f", DefaultMinWeight, lightest)
+	}
 	pruned, _ := IdentityPoolVersion(Constraints{})
 	if pruned == before {
 		t.Fatal("a floor that removes cells did not change PoolVersion")
 	}
-	for _, f := range []float64{0.0001, 0.0002} {
+	for _, f := range []float64{lightest / 4, lightest / 2} {
 		if v, _ := IdentityPoolVersion(Constraints{MinWeight: f}); v != before {
-			t.Fatalf("floor %v prunes nothing yet changed PoolVersion", f)
+			t.Fatalf("floor %v is under the lightest cell (%v), prunes nothing, yet changed PoolVersion", f, lightest)
 		}
 	}
 }
