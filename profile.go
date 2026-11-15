@@ -191,7 +191,24 @@ var BuiltinProfiles = []BrowserProfile{
 		TLSProfile: ProfileBrave146, Browser: "brave", OS: "linux",
 	},
 
-	// Edge 152 (Chromium engine, same TLS profile as Chrome 152).
+	// Edge 156, measured on Windows and Linux (testdata/wire/microsoft_edge_156_*).
+	// Its TLS profile is edge_156: Chrome 156's ClientHello without the
+	// trust_anchors extension, which Edge does not send. Windows first:
+	// profileForTLS returns the first match. macOS is not measured and has no
+	// entry; Edge's macOS User-Agent would be the Chromium-reduced token, but no
+	// Edge 156 was captured there.
+	{
+		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+		TLSProfile: ProfileEdge156, Browser: "edge", OS: "windows",
+	},
+	{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+		TLSProfile: ProfileEdge156, Browser: "edge", OS: "linux",
+	},
+	// Edge 152 (Chromium engine, same TLS profile as Chrome 152). Not measured
+	// against a real Edge 152: Edge 156 does not send the trust_anchors
+	// extension that chrome_152 does, so this entry's ClientHello may differ from
+	// a real Edge 152's.
 	{
 		UserAgent:  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0",
 		TLSProfile: ProfileChrome152, Browser: "edge", OS: "windows",

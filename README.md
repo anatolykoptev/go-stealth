@@ -9,7 +9,7 @@ It is a reusable HTTP layer, not an application: it carries no crawling or parsi
 
 ## Features
 
-- **TLS Fingerprinting** — browser profiles via [tls-client](https://github.com/bogdanfinn/tls-client): Chrome (up to `chrome_156`), Firefox, Safari, Brave and Edge, across macOS, Windows, Linux, Android and iOS; `BuiltinProfiles` lists the User-Agent paired with each
+- **TLS Fingerprinting** — browser profiles via [tls-client](https://github.com/bogdanfinn/tls-client): Chrome (up to `chrome_156`), Firefox, Safari, Brave and Edge (`edge_156` measured on Windows and Linux), across macOS, Windows, Linux, Android and iOS; `BuiltinProfiles` lists the User-Agent paired with each
 - **Default-deny SSRF guard** — a client refuses loopback, private, link-local and cloud-metadata targets at connect time and on redirects unless you replace the guard (`WithDialControl`, `WithRedirectGuard`, `WithRequestURLGuard`) or opt out with `WithoutSSRFGuard`
 - **Proxy Rotation** — static list or [Webshare](https://www.webshare.io/) API, per-proxy health tracking with auto-skip
 - **Rate Limiting** — per-key sliding window + per-domain limiter with wildcard matching
@@ -192,11 +192,12 @@ User-Agent, `sec-ch-ua` string or `accept` value that goes stale:
 
 `make fingerprint-wire` (build tag `wirelive`, network required, unreachable
 endpoint fails) measures `chrome_156`, the default client, `chrome_152`,
-fetch mode and `chrome_131` through tls.peet.ws and diffs JA4, ja4_r,
-peetprint, the HTTP/2 fingerprint and priority against the captures in
-`testdata/wire` (installed Google Chrome 156.0.8078.80; Chrome for Testing
-131 for information). JA3 must vary across connections for the modern
-profiles, as in Chrome, and stay constant for `chrome_131`. Offline,
+`edge_156`, fetch mode and `chrome_131` through tls.peet.ws and diffs JA4,
+ja4_r, peetprint, the HTTP/2 fingerprint and priority against the captures in
+`testdata/wire` (installed Google Chrome 156.0.8078.80 and Microsoft Edge
+156.0.4314.58; Chrome for Testing 131 for information). JA3 must vary across
+connections for the modern profiles, as in Chrome, and stay constant for
+`chrome_131`. Offline,
 `wire_*_test.go` capture the ClientHello and first HTTP/2 frames on a local
 listener and pin the `chrome_131` wire byte for byte.
 

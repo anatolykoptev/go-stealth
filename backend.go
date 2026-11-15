@@ -14,6 +14,7 @@ const (
 	ProfileChrome150   TLSProfile = "chrome_150"
 	ProfileChrome152   TLSProfile = "chrome_152"
 	ProfileChrome156   TLSProfile = "chrome_156"
+	ProfileEdge156     TLSProfile = "edge_156"
 	ProfileFirefox133  TLSProfile = "firefox_133"
 	ProfileFirefox148  TLSProfile = "firefox_148"
 	ProfileBrave146    TLSProfile = "brave_146"

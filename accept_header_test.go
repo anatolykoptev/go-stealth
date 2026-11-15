@@ -16,7 +16,9 @@ const (
 )
 
 // Navigation Accept follows the Chrome major: 156 added image/jxl, earlier
-// majors (131 and 152 measured) do not send it.
+// majors (131 and 152 measured) do not send it. Edge is the exception: Edge
+// 156 omits image/jxl (testdata/wire/microsoft_edge_156_*_nav.json), so its
+// entries are expected to carry the no-jxl value whatever the major.
 func TestNavigationAccept_FollowsChromeMajor(t *testing.T) {
 	seen := map[bool]int{}
 	for _, set := range [][]BrowserProfile{BuiltinProfiles, legacyProfiles} {
@@ -29,10 +31,10 @@ func TestNavigationAccept_FollowsChromeMajor(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := acceptNoJXL
-			if maj >= jxlFirstMajor {
+			if maj >= jxlFirstMajor && bp.Browser != "edge" {
 				want = acceptJXL
 			}
-			seen[maj >= jxlFirstMajor]++
+			seen[want == acceptJXL]++
 			if got := ChromeHeadersFor(bp)["accept"]; got != want {
 				t.Errorf("%s/%s (Chrome %d): accept = %q, want %q", bp.Browser, bp.OS, maj, got, want)
 			}
