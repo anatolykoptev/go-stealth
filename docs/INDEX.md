@@ -9,6 +9,8 @@
 | [LICENSE](../LICENSE) | Apache License 2.0 |
 | [compare](compare.md) | Comparison with other Go TLS-impersonation and client libraries, and where this one sits |
 | [references](references.md) | Third-party libraries and repositories worth learning from, grouped by topic |
+| [identity-model](identity-model.md) | Browser identity generator: sampling real-traffic identities restricted to the built-in TLS profiles |
+| [NOTICE](../NOTICE) | Attribution for the Apache-2.0 model data this library ships |
 | [roadmap](roadmap.md) | Phase-by-phase history and plans of the library, from v0.3 on |
 | [CLAUDE](../CLAUDE.md) | Notes for coding agents: layout, the exact CI gate, invariants (frozen chrome_131, SSRF default-deny, oracle rules) |
 | [CONTRIBUTING](../CONTRIBUTING.md) | Build, gate, network-only fingerprint checks, commit style and pull-request expectations |

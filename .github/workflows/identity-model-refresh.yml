@@ -1,0 +1,228 @@
+name: identity-model-refresh
+
+# Monthly: the upstream model is rebuilt on the 1st; on the 2nd we look at the
+# newest published packages and, if they are new and at least a day old, open a
+# PR with the converted model. Never merges anything.
+#
+# Two jobs, so that third-party code never runs next to a write token:
+#   build  runs npm packages, the importer and the test suite. It can only read
+#          the repository, holds no token and keeps no checkout credentials. Its
+#          only output is a fixed list of generated files.
+#   pr     holds the write permissions. It runs no repository or npm code: it
+#          checks that the artifact holds exactly the expected paths, commits
+#          them and opens the pull request.
+
+on:
+  schedule:
+    - cron: '17 6 2 * *'
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: identity-model-refresh
+  cancel-in-progress: false
+
+env:
+  # The only paths the build job may hand to the pr job.
+  ALLOWED_PATHS: >-
+    internal/identitymodel/model.json
+    internal/identitymodel/testdata/apify_reference.json
+    internal/identitymodel/testdata/oracle/package.json
+    internal/identitymodel/testdata/oracle/package-lock.json
+    internal/identitymodel/testdata/oracle/pool.json
+    testdata/identity_model_vectors.json
+    SUMMARY.md
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      go: ${{ steps.pick.outputs.go }}
+      version: ${{ steps.pick.outputs.version }}
+    env:
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      # npm 11.10 added --min-release-age; the runner image's own npm is older,
+      # and an older npm turns the unknown flag into a package name instead of
+      # failing. Node 26 bundles npm 11.20 (nodejs.org/dist/index.json).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - name: Require an npm that has --min-release-age
+        run: |
+          set -euo pipefail
+          v=$(npm -v)
+          IFS=. read -r major minor _ <<<"$v"
+          echo "node $(node -v), npm $v"
+          if [ "$major" -lt 11 ] || { [ "$major" -eq 11 ] && [ "$minor" -lt 10 ]; }; then
+            echo "npm $v is older than 11.10: --min-release-age would be ignored"; exit 1
+          fi
+
+      # Each package is resolved and age-checked on its own: header-generator
+      # pins an exact generative-bayesian-network, and both must be at least 24
+      # hours old.
+      - name: Pick versions at least 24 hours old
+        id: pick
+        run: |
+          set -euo pipefail
+          semver='^[0-9]+\.[0-9]+\.[0-9]+$'
+          age() { echo $(( $(date +%s) - $(date -d "$(npm view "$1" "time[$2]")" +%s) )); }
+          hg=$(npm view header-generator version)
+          gbn=$(npm view "header-generator@$hg" dependencies.generative-bayesian-network)
+          [[ $hg =~ $semver && $gbn =~ $semver ]] || { echo "unexpected version strings: '$hg' '$gbn'"; exit 1; }
+          echo "header-generator=$hg generative-bayesian-network=$gbn"
+          hg_age=$(age header-generator "$hg"); gbn_age=$(age generative-bayesian-network "$gbn")
+          echo "ages: header-generator=${hg_age}s generative-bayesian-network=${gbn_age}s"
+          current=$(jq -r '.source.package // ""' internal/identitymodel/model.json)
+          if [ "$hg_age" -lt 86400 ] || [ "$gbn_age" -lt 86400 ]; then
+            echo "a package is under 24 hours old; nothing to do"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$current" = "header-generator@$hg" ]; then
+            echo "model is already at $hg"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git ls-remote --exit-code --heads origin "chore/identity-model-$hg" >/dev/null 2>&1; then
+            echo "branch for $hg already exists"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          {
+            echo "go=true"; echo "version=$hg"; echo "gbn=$gbn"
+            echo "date=$(date -u -d "$(npm view header-generator "time[$hg]")" +%F)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the data package
+        if: steps.pick.outputs.go == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/up" && cd "$RUNNER_TEMP/up"
+          npm pack "header-generator@$VERSION" --silent --ignore-scripts
+          tar xzf "header-generator-$VERSION.tgz" package/data_files/input-network-definition.zip
+
+      # Resolution writes the lock file without running any package code; the
+      # install then follows the lock exactly and runs no install scripts.
+      - name: Lock and install the upstream sampler
+        if: steps.pick.outputs.go == 'true'
+        working-directory: internal/identitymodel/testdata/oracle
+        env:
+          GBN: ${{ steps.pick.outputs.gbn }}
+        run: |
+          set -euo pipefail
+          npm install --package-lock-only --ignore-scripts --save-exact --min-release-age 1 "generative-bayesian-network@$GBN"
+          npm ci --ignore-scripts
+
+      - name: Summary before
+        if: steps.pick.outputs.go == 'true'
+        run: go run ./cmd/identity-model-import -print > "$RUNNER_TEMP/before.txt"
+
+      - name: Import (freshness guard inside) and regenerate the reference
+        if: steps.pick.outputs.go == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+          DATE: ${{ steps.pick.outputs.date }}
+        run: |
+          set -euo pipefail
+          zip="$RUNNER_TEMP/up/package/data_files/input-network-definition.zip"
+          go run ./cmd/identity-model-import -in "$zip" -package "header-generator@$VERSION" -committed "$DATE" \
+            -out internal/identitymodel/model.json
+          go run ./cmd/identity-model-import -pool-out internal/identitymodel/testdata/oracle/pool.json
+          (cd internal/identitymodel/testdata/oracle && node apify_marginals.mjs "$zip") \
+            > internal/identitymodel/testdata/apify_reference.json
+          go test -count=1 ./ -run TestGenerateIdentity_Vectors -update-identity-vectors
+          go run ./cmd/identity-model-import -print > "$RUNNER_TEMP/after.txt"
+
+      - name: Full gate
+        if: steps.pick.outputs.go == 'true'
+        run: make preflight
+
+      - name: Stage the generated files
+        if: steps.pick.outputs.go == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Refresh of the browser identity model to \`header-generator@$VERSION\`."
+            echo
+            echo "The build job ran the freshness guard (newest Chrome within 2 majors of our newest profile, every Chrome major we ship present), regenerated the upstream reference counts from the locked \`generative-bayesian-network\`, regenerated the vectors, and ran \`make preflight\` including the sampler-vs-upstream test. A pull request opened with the default token does not start the CI workflow; push an empty commit or close and reopen to run it here."
+            echo
+            echo "Changed rows in \`testdata/identity_model_vectors.json\` are identities that would move for a caller who re-derives from a seed: review them. Stored identities do not change."
+            echo
+            echo "\`package-lock.json\` changed too: review the resolved versions and integrity hashes."
+            echo
+            echo '### Model and default distribution, before and after'
+            echo '```diff'
+            diff -u "$RUNNER_TEMP/before.txt" "$RUNNER_TEMP/after.txt" | tail -n +3 || true
+            echo '```'
+            echo
+            echo "Not merged automatically."
+          } > SUMMARY.md
+          mkdir stage
+          for p in $ALLOWED_PATHS; do
+            mkdir -p "stage/$(dirname "$p")"; cp "$p" "stage/$p"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.pick.outputs.go == 'true'
+        with:
+          name: identity-model-refresh
+          path: stage
+          if-no-files-found: error
+          retention-days: 7
+
+  pr:
+    needs: build
+    if: needs.build.outputs.go == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: identity-model-refresh
+          path: ${{ runner.temp }}/stage
+      - name: Open the pull request
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/stage"
+          [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unexpected version '$VERSION'"; exit 1; }
+          # The artifact must hold exactly the allowed regular files, nothing else.
+          want=$(for p in $ALLOWED_PATHS; do echo "$p"; done | sort)
+          have=$(cd "$stage" && find . -type f -o -type l | sed 's|^\./||' | sort)
+          [ "$want" = "$have" ] || { echo "artifact paths differ from the allowed list:"; diff <(echo "$want") <(echo "$have") || true; exit 1; }
+          if find "$stage" -type l | grep -q .; then echo "artifact contains a symlink"; exit 1; fi
+          for p in $ALLOWED_PATHS; do
+            [ "$p" = SUMMARY.md ] && continue
+            cp "$stage/$p" "$p"
+          done
+          # After the copy only allowed paths may differ from the checkout.
+          changed=$(git status --porcelain --untracked-files=all | sed 's/^...//' | sort)
+          for f in $changed; do
+            case " $ALLOWED_PATHS " in *" $f "*) ;; *) echo "unexpected change: $f"; exit 1 ;; esac
+          done
+          branch="chore/identity-model-$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          for p in $ALLOWED_PATHS; do
+            [ "$p" = SUMMARY.md ] || git add -- "$p"
+          done
+          git commit -m "chore(identity-model): refresh to header-generator $VERSION"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore(identity-model): refresh to header-generator $VERSION" \
+            --body-file "$stage/SUMMARY.md"

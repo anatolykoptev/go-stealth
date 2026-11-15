@@ -1,0 +1,470 @@
+package stealth
+
+import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+
+	"github.com/anatolykoptev/go-stealth/internal/identitymodel"
+)
+
+// ErrNoIdentity is returned when the constraints leave no browser identity
+// that both the model knows and a built-in TLS profile backs.
+var ErrNoIdentity = errors.New("stealth: no browser identity satisfies the constraints")
+
+// Constraints narrows the identities GenerateIdentity and IdentityDistribution
+// draw from. The zero value means: every built-in profile, desktop only,
+// every OS, locale en-US.
+type Constraints struct {
+	// Profiles lists the TLS profiles an identity may ride. Empty means the
+	// profiles of BuiltinProfiles. A profile outside BuiltinProfiles (for
+	// example a legacy one) is used only when listed here, so a frozen
+	// profile is never drawn by accident. A listed profile the model has no
+	// entry for contributes nothing: Brave (it sends a Chrome User-Agent, so
+	// the model cannot tell it apart), and Firefox or Safari whenever the
+	// model lacks their exact version. When no listed profile has an entry,
+	// the call returns ErrNoIdentity.
+	Profiles []TLSProfile `json:"profiles,omitempty"`
+	// OS limits the operating systems ("windows", "macos", "linux",
+	// "android", "ios"). Empty means all.
+	OS []string `json:"os,omitempty"`
+	// IncludeMobile also draws mobile identities, in the model's
+	// desktop/mobile proportion. Off by default: the built-in TLS profiles
+	// were measured as desktop Chrome.
+	IncludeMobile bool `json:"include_mobile,omitempty"`
+	// Locales lists the locales to pick the accept-language from, as BCP 47
+	// tags such as "de-DE"; case is normalised ("en-us" becomes "en-US"). The
+	// model does not cover language; the pick is
+	// uniform and seeded. Empty means "en-US".
+	Locales []string `json:"locales,omitempty"`
+	// MinWeight is the smallest probability an identity may have. An
+	// identity the model gives less than this is dropped and the rest
+	// renormalised, repeating until none is below the floor: a fleet of a
+	// few accounts that drew a 0.1% browser would stand out more than the
+	// model's long tail is worth. Zero means DefaultMinWeight; a negative
+	// value turns the floor off.
+	MinWeight float64 `json:"min_weight,omitempty"`
+}
+
+// DefaultMinWeight is the MinWeight used when Constraints leaves it zero: 1%.
+const DefaultMinWeight = 0.01
+
+func (c Constraints) minWeight() float64 {
+	switch {
+	case c.MinWeight < 0:
+		return 0
+	case c.MinWeight == 0:
+		return DefaultMinWeight
+	}
+	return c.MinWeight
+}
+
+// GeneratedIdentity is a BrowserIdentity together with the request language
+// drawn for it.
+//
+// Only GeneratedIdentity.RequestHeaders applies AcceptLanguage. Passing
+// g.BrowserIdentity to WithIdentity, or building headers with
+// BrowserClient.RequestHeaders, drops it: those see the plain BrowserIdentity
+// and fall back to en-US unless HeaderOptions.AcceptLanguage is set from
+// g.AcceptLanguage.
+type GeneratedIdentity struct {
+	BrowserIdentity
+	// Locale is the drawn locale tag.
+	Locale string
+	// AcceptLanguage is the accept-language value for Locale.
+	AcceptLanguage string
+	// ModelVersion labels the model data the identity was drawn from.
+	ModelVersion string
+	// PoolVersion labels the set of identities the draw chose among: a hash
+	// of every candidate entry (OS, device, model value, TLS profile,
+	// browser, User-Agent) left after the constraints and the weight floor.
+	// A change to the built-in profile set, or to a constraint or the floor
+	// that changes which entries remain, changes it. Constraints.Locales is
+	// not part of it: it changes the locale draw, so keep the locale list
+	// with the stored identity. The label belongs to this implementation;
+	// another language does not reproduce it.
+	PoolVersion string
+}
+
+// RequestHeaders is BrowserIdentity.RequestHeaders with AcceptLanguage filled
+// in from the drawn locale unless opts sets one.
+func (g GeneratedIdentity) RequestHeaders(opts HeaderOptions) (RequestHeaders, error) {
+	if opts.AcceptLanguage == "" {
+		opts.AcceptLanguage = g.AcceptLanguage
+	}
+	return g.BrowserIdentity.RequestHeaders(opts)
+}
+
+// WeightedIdentity is an identity and its probability under the constraints.
+type WeightedIdentity struct {
+	Identity BrowserIdentity
+	Weight   float64
+}
+
+// IdentitySeed turns a stable key (an account id, a session id) into a seed.
+// It is the first eight bytes of the key's SHA-256, big-endian, so any
+// language reproduces it.
+//
+// A seed is not an identity. What GenerateIdentity returns for a seed depends
+// on the model data, the built-in profile set and the weight floor, all of
+// which change in library upgrades. Persist the identity you draw and render
+// from the stored value; never re-derive it from the seed after an upgrade.
+func IdentitySeed(key string) uint64 {
+	h := sha256.Sum256([]byte(key))
+	return binary.BigEndian.Uint64(h[:8])
+}
+
+// GenerateIdentity draws one browser identity from a model of real browser
+// traffic, restricted to identities a built-in TLS profile backs.
+//
+// PERSIST THE RESULT. Do not store the seed and call this again later: the
+// same seed and constraints give the same identity only while the model data
+// (GeneratedIdentity.ModelVersion), the pool of candidate entries
+// (GeneratedIdentity.PoolVersion; it moves whenever BuiltinProfiles or the
+// weight floor change) and the algorithm are unchanged, and a library upgrade
+// can change any of them. Store the drawn identity, for example its TLS
+// profile, OS and locale, and render from that. IdentityPoolVersion lets a
+// caller see in advance whether a seed would still land where it did.
+//
+// The model chooses which built-in entry (browser, major version, OS) is
+// presented. The draw follows the model's level-wise distribution, as the
+// upstream sampler does: device, then OS given the device, then browser given
+// both, each renormalised over what the pool allows at that step. It is not
+// the model's joint distribution conditioned on the pool, so a constraint on
+// one level does not reweight the levels above it. The model never supplies
+// strings: the User-Agent, Client Hints and header values come from the
+// built-in entry, so the captured Chrome 156 values stay authoritative.
+//
+// Draw once per session or account and keep the result; do not draw per
+// request.
+func GenerateIdentity(seed uint64, c Constraints) (GeneratedIdentity, error) {
+	f, err := identitymodel.Default()
+	if err != nil {
+		return GeneratedIdentity{}, err
+	}
+	pool, err := buildPool(f, c)
+	if err != nil {
+		return GeneratedIdentity{}, err
+	}
+	r := identitymodel.NewRand(seed)
+	sample, ok := f.Networks["input"].Sample(r, pool.allow)
+	if !ok {
+		return GeneratedIdentity{}, ErrNoIdentity
+	}
+	bp, ok := pool.entry(sample)
+	if !ok {
+		return GeneratedIdentity{}, ErrNoIdentity
+	}
+	locales := c.Locales
+	if len(locales) == 0 {
+		locales = []string{"en-US"}
+	}
+	locale := locales[int(r.Float64()*float64(len(locales)))]
+	locale, err = canonicalLocale(locale)
+	if err != nil {
+		return GeneratedIdentity{}, err
+	}
+	al, err := acceptLanguageFor(locale)
+	if err != nil {
+		return GeneratedIdentity{}, err
+	}
+	return GeneratedIdentity{
+		BrowserIdentity: BrowserIdentity{BrowserProfile: bp, ClientHints: ClientHintsHeaders(bp.UserAgent)},
+		Locale:          locale,
+		AcceptLanguage:  al,
+		ModelVersion:    f.Source.Version(),
+		PoolVersion:     pool.version(),
+	}, nil
+}
+
+// IdentityPoolVersion returns the PoolVersion a draw under c would carry,
+// without drawing. Compare it with the PoolVersion stored beside an identity
+// to learn whether the candidate set has changed since.
+func IdentityPoolVersion(c Constraints) (string, error) {
+	f, err := identitymodel.Default()
+	if err != nil {
+		return "", err
+	}
+	pool, err := buildPool(f, c)
+	if err != nil {
+		return "", err
+	}
+	return pool.version(), nil
+}
+
+// IdentityDistribution returns every identity GenerateIdentity can draw under
+// c and its exact probability, most likely first. It is the weight table for
+// a caller that picks by its own stable scheme (for example rendezvous
+// hashing, which keeps an assignment when the candidate list grows).
+func IdentityDistribution(c Constraints) ([]WeightedIdentity, error) {
+	f, err := identitymodel.Default()
+	if err != nil {
+		return nil, err
+	}
+	pool, err := buildPool(f, c)
+	if err != nil {
+		return nil, err
+	}
+	acc := map[string]*WeightedIdentity{}
+	for _, o := range f.Networks["input"].Distribution(pool.allow) {
+		bp, ok := pool.entry(o.Values)
+		if !ok {
+			continue
+		}
+		k := string(bp.TLSProfile) + "|" + bp.Browser + "|" + bp.OS
+		if w, ok := acc[k]; ok {
+			w.Weight += o.P
+			continue
+		}
+		acc[k] = &WeightedIdentity{
+			Identity: BrowserIdentity{BrowserProfile: bp, ClientHints: ClientHintsHeaders(bp.UserAgent)},
+			Weight:   o.P,
+		}
+	}
+	out := make([]WeightedIdentity, 0, len(acc))
+	for _, w := range acc {
+		out = append(out, *w)
+	}
+	if len(out) == 0 {
+		return nil, ErrNoIdentity
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Weight != out[j].Weight {
+			return out[i].Weight > out[j].Weight
+		}
+		return out[i].Identity.UserAgent < out[j].Identity.UserAgent
+	})
+	return out, nil
+}
+
+// buildPool is newIdentityPool followed by the weight floor: while some entry
+// of the pool has less than the floor's probability under the model, the
+// lightest one leaves the pool and the distribution is recomputed. One at a
+// time, because removing an entry raises the others.
+func buildPool(f *identitymodel.File, c Constraints) (*identityPool, error) {
+	pool, err := newIdentityPool(c)
+	if err != nil {
+		return nil, err
+	}
+	floor := c.minWeight()
+	if floor == 0 {
+		return pool, nil
+	}
+	nw := f.Networks["input"]
+	for {
+		weights := map[poolCell]float64{}
+		for _, o := range nw.Distribution(pool.allow) {
+			k := poolCell{o.Values["*OPERATING_SYSTEM"], o.Values["*DEVICE"], o.Values["*BROWSER_HTTP"]}
+			weights[k] += o.P
+		}
+		if len(weights) == 0 {
+			return nil, ErrNoIdentity
+		}
+		var lightest poolCell
+		lightW := 2.0
+		for k, w := range weights {
+			if w < lightW || (w == lightW && cellLess(k, lightest)) {
+				lightest, lightW = k, w
+			}
+		}
+		if lightW >= floor {
+			return pool, nil
+		}
+		delete(pool.byCell, lightest)
+		pool.rebuildCells()
+	}
+}
+
+// version hashes every cell of the pool with the entry behind it into a short
+// label. The weight floor is not hashed: it acts only by removing cells, so the
+// pool that remains already carries its effect.
+func (p *identityPool) version() string {
+	lines := make([]string, 0, len(p.byCell))
+	for k, bp := range p.byCell {
+		lines = append(lines, strings.Join([]string{k.os, k.device, k.browserHTTP, string(bp.TLSProfile), bp.Browser, bp.UserAgent}, "|"))
+	}
+	sort.Strings(lines)
+	h := sha256.Sum256([]byte(strings.Join(lines, "\n")))
+	return hex.EncodeToString(h[:6])
+}
+
+func cellLess(a, b poolCell) bool {
+	if a.os != b.os {
+		return a.os < b.os
+	}
+	if a.device != b.device {
+		return a.device < b.device
+	}
+	return a.browserHTTP < b.browserHTTP
+}
+
+func (p *identityPool) rebuildCells() {
+	p.cells = map[[2]string]bool{}
+	for k := range p.byCell {
+		p.cells[[2]string{k.os, k.device}] = true
+	}
+}
+
+// identityPool is the set of built-in entries the constraints allow, indexed
+// by the model value they correspond to.
+type identityPool struct {
+	byCell map[poolCell]BrowserProfile
+	cells  map[[2]string]bool // {os, device}
+}
+
+type poolCell struct {
+	os, device, browserHTTP string
+}
+
+func newIdentityPool(c Constraints) (*identityPool, error) {
+	profiles := map[TLSProfile]bool{}
+	for _, p := range c.Profiles {
+		profiles[p] = true
+	}
+	if len(c.Profiles) == 0 {
+		for _, bp := range BuiltinProfiles {
+			profiles[bp.TLSProfile] = true
+		}
+	}
+	oses := map[string]bool{}
+	for _, o := range c.OS {
+		oses[strings.ToLower(o)] = true
+	}
+	p := &identityPool{byCell: map[poolCell]BrowserProfile{}, cells: map[[2]string]bool{}}
+	for _, set := range [][]BrowserProfile{BuiltinProfiles, legacyProfiles} {
+		for _, bp := range set {
+			if !profiles[bp.TLSProfile] || (len(oses) > 0 && !oses[bp.OS]) {
+				continue
+			}
+			if bp.Mobile && !c.IncludeMobile {
+				continue
+			}
+			val, ok := modelBrowserValue(bp)
+			if !ok {
+				continue
+			}
+			device := "desktop"
+			if bp.Mobile {
+				device = "mobile"
+			}
+			k := poolCell{bp.OS, device, val}
+			if _, dup := p.byCell[k]; dup {
+				continue // first entry wins, as profileForTLS does
+			}
+			p.byCell[k] = bp
+			p.cells[[2]string{bp.OS, device}] = true
+		}
+	}
+	if len(p.byCell) == 0 {
+		return nil, ErrNoIdentity
+	}
+	return p, nil
+}
+
+// allow is the constraint set for the model's input network: a value is
+// permitted when at least one pool entry is reachable through it.
+func (p *identityPool) allow(node string, partial map[string]string, value string) bool {
+	switch node {
+	case "*DEVICE":
+		for k := range p.cells {
+			if k[1] == value {
+				return true
+			}
+		}
+		return false
+	case "*OPERATING_SYSTEM":
+		return p.cells[[2]string{value, partial["*DEVICE"]}]
+	case "*BROWSER_HTTP":
+		_, ok := p.byCell[poolCell{partial["*OPERATING_SYSTEM"], partial["*DEVICE"], value}]
+		return ok
+	}
+	return true
+}
+
+func (p *identityPool) entry(sample map[string]string) (BrowserProfile, bool) {
+	bp, ok := p.byCell[poolCell{sample["*OPERATING_SYSTEM"], sample["*DEVICE"], sample["*BROWSER_HTTP"]}]
+	return bp, ok
+}
+
+var (
+	reFirefoxMajorMinor = regexp.MustCompile(`Firefox/(\d+\.\d+)`)
+	reSafariVersionTok  = regexp.MustCompile(`Version/(\d+(?:\.\d+)*)`)
+)
+
+// modelBrowserValue renders a built-in entry as the model's *BROWSER_HTTP
+// value ("chrome/156.0.0.0|2"). Only an exact version match counts: the model
+// has no entry for a version the library has not measured, and an entry with
+// no model value (Brave, which sends a Chrome User-Agent) is not drawn. The
+// built-in TLS backends speak HTTP/2, hence "|2".
+func modelBrowserValue(bp BrowserProfile) (string, bool) {
+	ua := bp.UserAgent
+	switch bp.Browser {
+	case "chrome":
+		return "chrome/" + ExtractChromeVersion(ua) + ".0.0.0|2", true
+	case "edge":
+		return "edge/" + extractEdgeVersion(ua) + ".0.0.0|2", true
+	case "firefox":
+		if m := reFirefoxMajorMinor.FindStringSubmatch(ua); m != nil {
+			return "firefox/" + m[1] + "|2", true
+		}
+	case "safari":
+		if m := reSafariVersionTok.FindStringSubmatch(ua); m != nil {
+			return "safari/" + m[1] + "|2", true
+		}
+	}
+	return "", false
+}
+
+var reLocaleTag = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
+
+// canonicalLocale writes a BCP 47 tag the way browsers do: language in lower
+// case, a four-letter script in title case, a two-letter region in upper case,
+// anything else in lower case. "en-us" and "EN-US" both become "en-US".
+func canonicalLocale(tag string) (string, error) {
+	if !reLocaleTag.MatchString(tag) {
+		return "", fmt.Errorf("stealth: invalid locale tag %q", tag)
+	}
+	parts := strings.Split(tag, "-")
+	for i, p := range parts {
+		switch {
+		case i == 0:
+			parts[i] = strings.ToLower(p)
+		case len(p) == 4 && isAlpha(p):
+			parts[i] = strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+		case len(p) == 2 && isAlpha(p):
+			parts[i] = strings.ToUpper(p)
+		default:
+			parts[i] = strings.ToLower(p)
+		}
+	}
+	return strings.Join(parts, "-"), nil
+}
+
+func isAlpha(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// acceptLanguageFor renders Chrome's accept-language for a single-language
+// browser: "de-DE" gives "de-DE,de;q=0.9", "de" gives "de". The tag is
+// canonicalised first.
+func acceptLanguageFor(tag string) (string, error) {
+	tag, err := canonicalLocale(tag)
+	if err != nil {
+		return "", err
+	}
+	lang, _, regional := strings.Cut(tag, "-")
+	if !regional {
+		return tag, nil
+	}
+	return tag + "," + lang + ";q=0.9", nil
+}
