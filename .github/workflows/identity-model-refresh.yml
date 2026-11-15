@@ -1,0 +1,123 @@
+name: identity-model-refresh
+
+# Monthly: the upstream model is rebuilt on the 1st; on the 2nd we look at the
+# newest published package and, if it is new and at least a day old, open a PR
+# with the converted model. Never merges anything.
+
+on:
+  schedule:
+    - cron: '17 6 2 * *'
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: identity-model-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GOWORK: 'off'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Pick the newest package that is at least 24 hours old
+        id: pick
+        run: |
+          set -euo pipefail
+          version=$(npm view header-generator version)
+          published=$(npm view header-generator "time[$version]")
+          age=$(( $(date +%s) - $(date -d "$published" +%s) ))
+          current=$(jq -r '.source.package // ""' internal/identitymodel/model.json)
+          echo "latest=$version published=$published age=${age}s current=${current:-none}"
+          if [ "$age" -lt 86400 ]; then
+            echo "newest package is under 24 hours old; nothing to do"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$current" = "header-generator@$version" ]; then
+            echo "model is already at $version"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git ls-remote --exit-code --heads origin "chore/identity-model-$version" >/dev/null 2>&1; then
+            echo "branch for $version already exists"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          {
+            echo "go=true"; echo "version=$version"; echo "date=${published%%T*}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the package and the upstream sampler
+        if: steps.pick.outputs.go == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/up" && cd "$RUNNER_TEMP/up"
+          npm pack "header-generator@$VERSION" --silent
+          tar xzf "header-generator-$VERSION.tgz" package/data_files/input-network-definition.zip
+          npm init -y >/dev/null
+          npm install --ignore-scripts "generative-bayesian-network@$VERSION"
+
+      - name: Summary before
+        if: steps.pick.outputs.go == 'true'
+        run: go run ./cmd/identity-model-import -print > "$RUNNER_TEMP/before.txt"
+
+      - name: Import (freshness guard inside) and regenerate the reference
+        if: steps.pick.outputs.go == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+          DATE: ${{ steps.pick.outputs.date }}
+        run: |
+          set -euo pipefail
+          up="$RUNNER_TEMP/up"
+          go run ./cmd/identity-model-import \
+            -in "$up/package/data_files/input-network-definition.zip" \
+            -package "header-generator@$VERSION" -committed "$DATE" \
+            -out internal/identitymodel/model.json
+          cp internal/identitymodel/testdata/oracle/apify_marginals.mjs "$up/"
+          (cd "$up" && GBN_VERSION="$VERSION" node apify_marginals.mjs package/data_files/input-network-definition.zip) \
+            > internal/identitymodel/testdata/apify_reference.json
+          go test -count=1 ./ -run TestGenerateIdentity_Vectors -update-identity-vectors
+          go run ./cmd/identity-model-import -print > "$RUNNER_TEMP/after.txt"
+
+      - name: Full gate
+        if: steps.pick.outputs.go == 'true'
+        run: make preflight
+
+      - name: Open the pull request
+        if: steps.pick.outputs.go == 'true'
+        env:
+          VERSION: ${{ steps.pick.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="chore/identity-model-$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add internal/identitymodel/model.json internal/identitymodel/testdata/apify_reference.json testdata/identity_model_vectors.json
+          git commit -m "chore(identity-model): refresh to header-generator $VERSION"
+          git push origin "$branch"
+          {
+            echo "Refresh of the browser identity model to \`header-generator@$VERSION\`, published at least 24 hours before this run."
+            echo
+            echo "The job ran the freshness guard (newest Chrome within 2 majors of our newest profile, every Chrome major we ship present), regenerated the upstream reference counts from \`generative-bayesian-network@$VERSION\`, and ran \`make preflight\` including the sampler-vs-upstream test. Pull requests opened with the default token do not start the CI workflow; push an empty commit or close and reopen to run it here."
+            echo
+            echo "Changed rows in \`testdata/identity_model_vectors.json\` are identities that would move for a caller who re-derives from a seed: review them, and remember that stored identities do not change."
+            echo
+            echo '### Model and default distribution, before and after'
+            echo '```diff'
+            diff -u "$RUNNER_TEMP/before.txt" "$RUNNER_TEMP/after.txt" | tail -n +3 || true
+            echo '```'
+            echo
+            echo "Not merged automatically."
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create --base main --head "$branch" \
+            --title "chore(identity-model): refresh to header-generator $VERSION" \
+            --body-file "$RUNNER_TEMP/body.md"

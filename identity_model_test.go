@@ -350,3 +350,63 @@ func sortVectors(v []identityVector) {
 		}
 	}
 }
+
+func TestMinWeightFloor(t *testing.T) {
+	check := func(name string, c Constraints, floor float64) []WeightedIdentity {
+		t.Helper()
+		d, err := IdentityDistribution(c)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var sum float64
+		for _, w := range d {
+			sum += w.Weight
+			if floor > 0 && w.Weight < floor {
+				t.Errorf("%s: %s/%s %s has weight %.4f under the %.2f floor", name, w.Identity.TLSProfile, w.Identity.Browser, w.Identity.OS, w.Weight, floor)
+			}
+		}
+		if math.Abs(sum-1) > 1e-9 {
+			t.Errorf("%s: weights sum to %v, want renormalised to 1", name, sum)
+		}
+		return d
+	}
+	def := check("default", Constraints{}, DefaultMinWeight)
+	off := check("off", Constraints{MinWeight: -1}, 0)
+	high := check("5%", Constraints{MinWeight: 0.05}, 0.05)
+	if len(off) <= len(def) || len(def) <= len(high) {
+		t.Fatalf("floor should shrink the pool: off=%d default=%d 5%%=%d", len(off), len(def), len(high))
+	}
+	// The tail the default floor drops is never drawn.
+	kept := map[string]bool{}
+	for _, w := range def {
+		kept[w.Identity.UserAgent] = true
+	}
+	for seed := uint64(0); seed < 5000; seed++ {
+		g, err := GenerateIdentity(seed, Constraints{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !kept[g.UserAgent] {
+			t.Fatalf("seed %d drew %s, below the floor", seed, g.UserAgent)
+		}
+	}
+	// With the floor off the tail is reachable.
+	tail := map[string]bool{}
+	for _, w := range off {
+		if !kept[w.Identity.UserAgent] {
+			tail[w.Identity.UserAgent] = true
+		}
+	}
+	reached := false
+	for seed := uint64(0); seed < 20000 && !reached; seed++ {
+		g, _ := GenerateIdentity(seed, Constraints{MinWeight: -1})
+		reached = tail[g.UserAgent]
+	}
+	if !reached {
+		t.Fatal("floor off never drew a tail identity")
+	}
+	// A floor above 1 leaves nothing.
+	if _, err := GenerateIdentity(1, Constraints{MinWeight: 1.5}); !errors.Is(err, ErrNoIdentity) {
+		t.Errorf("floor above every weight: err = %v, want ErrNoIdentity", err)
+	}
+}

@@ -15,6 +15,7 @@ among identities the library can present coherently.
 - `Constraints.Profiles` is the available TLS profile set (default: the
   profiles of `BuiltinProfiles`; legacy profiles only when listed).
 - `Constraints.Locales` picks the accept-language; the model does not cover it.
+- `Constraints.MinWeight` drops identities the model gives less than 1% (default; negative turns it off) and renormalises, so a small fleet does not draw the long tail.
 - `IdentityDistribution` returns the exact probability of each identity, for
   callers that choose by their own stable scheme.
 - The same seed gives the same identity under one model version
@@ -23,3 +24,5 @@ among identities the library can present coherently.
 
 Data and licence: see [NOTICE](../NOTICE) and
 [internal/identitymodel/testdata/README.md](../internal/identitymodel/testdata/README.md).
+
+The model file is refreshed monthly by a workflow that opens a pull request after a freshness check; it never merges.

@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 )
 
 // FormatV1 is the value of File.Format this package reads.
@@ -33,22 +34,58 @@ type File struct {
 
 // Source is the provenance of a model file.
 type Source struct {
-	Project   string `json:"project"`
-	Licence   string `json:"licence"`
-	Commit    string `json:"commit"`
-	Committed string `json:"committed"` // YYYY-MM-DD of the upstream commit
-	File      string `json:"file"`      // path of the upstream file
-	SHA256    string `json:"sha256"`    // of the upstream file as imported
+	Project string `json:"project"`
+	Licence string `json:"licence"`
+	// Commit is the upstream git commit, when known.
+	Commit string `json:"commit,omitempty"`
+	// Package is the published npm package the file was taken from, for
+	// example "header-generator@2.1.90", when known.
+	Package string `json:"package,omitempty"`
+	// Committed is the YYYY-MM-DD of the upstream commit or release.
+	Committed string `json:"committed"`
+	File      string `json:"file"`   // path of the upstream file
+	SHA256    string `json:"sha256"` // of the upstream file as imported
 }
 
-// Version is a short, stable label of the model data: the upstream commit
-// date and its short hash.
+// Version is a short, stable label of the model data: the upstream date and
+// the short commit hash, or the package version when no commit is known.
 func (s Source) Version() string {
 	c := s.Commit
 	if len(c) > 7 {
 		c = c[:7]
 	}
+	if c == "" {
+		_, c, _ = strings.Cut(s.Package, "@")
+	}
 	return s.Committed + "-" + c
+}
+
+// BrowserValues returns every value of node that has a non-zero probability
+// somewhere in its table, for example the "chrome/156.0.0.0|2" strings of the
+// *BROWSER_HTTP node.
+func (n *Network) BrowserValues(node string) map[string]bool {
+	out := map[string]bool{}
+	nd, ok := n.byName[node]
+	if !ok {
+		return out
+	}
+	var walk func(c *CPT)
+	walk = func(c *CPT) {
+		if c == nil {
+			return
+		}
+		for _, e := range c.Leaf {
+			if e.P > 0 {
+				out[nd.Values[e.Index]] = true
+			}
+		}
+		for _, sub := range c.Deeper {
+			walk(sub)
+		}
+		walk(c.Skip)
+	}
+	walk(nd.CPT)
+	return out
 }
 
 // Network is a list of nodes in sampling order: a node's parents always come

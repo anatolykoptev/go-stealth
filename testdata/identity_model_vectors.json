@@ -3,10 +3,10 @@
   "name": "default",
   "seed": 0,
   "constraints": {},
-  "tls_profile": "chrome_150",
+  "tls_profile": "chrome_152",
   "browser": "chrome",
   "os": "macos",
-  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
   "locale": "en-US",
   "accept_language": "en-US,en;q=0.9"
  },
@@ -142,10 +142,10 @@
     "fr-FR"
    ]
   },
-  "tls_profile": "chrome_150",
+  "tls_profile": "chrome_152",
   "browser": "chrome",
   "os": "macos",
-  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
   "locale": "fr-FR",
   "accept_language": "fr-FR,fr;q=0.9"
  },
@@ -250,10 +250,10 @@
     "fr-FR"
    ]
   },
-  "tls_profile": "chrome_152",
+  "tls_profile": "chrome_156",
   "browser": "chrome",
   "os": "macos",
-  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
   "locale": "fr-FR",
   "accept_language": "fr-FR,fr;q=0.9"
  },

@@ -36,6 +36,26 @@ type Constraints struct {
 	// tags such as "de-DE". The model does not cover language; the pick is
 	// uniform and seeded. Empty means "en-US".
 	Locales []string `json:"locales,omitempty"`
+	// MinWeight is the smallest probability an identity may have. An
+	// identity the model gives less than this is dropped and the rest
+	// renormalised, repeating until none is below the floor: a fleet of a
+	// few accounts that drew a 0.1% browser would stand out more than the
+	// model's long tail is worth. Zero means DefaultMinWeight; a negative
+	// value turns the floor off.
+	MinWeight float64 `json:"min_weight,omitempty"`
+}
+
+// DefaultMinWeight is the MinWeight used when Constraints leaves it zero: 1%.
+const DefaultMinWeight = 0.01
+
+func (c Constraints) minWeight() float64 {
+	switch {
+	case c.MinWeight < 0:
+		return 0
+	case c.MinWeight == 0:
+		return DefaultMinWeight
+	}
+	return c.MinWeight
 }
 
 // GeneratedIdentity is a BrowserIdentity together with the request language
@@ -91,7 +111,7 @@ func GenerateIdentity(seed uint64, c Constraints) (GeneratedIdentity, error) {
 	if err != nil {
 		return GeneratedIdentity{}, err
 	}
-	pool, err := newIdentityPool(c)
+	pool, err := buildPool(f, c)
 	if err != nil {
 		return GeneratedIdentity{}, err
 	}
@@ -130,7 +150,7 @@ func IdentityDistribution(c Constraints) ([]WeightedIdentity, error) {
 	if err != nil {
 		return nil, err
 	}
-	pool, err := newIdentityPool(c)
+	pool, err := buildPool(f, c)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +184,61 @@ func IdentityDistribution(c Constraints) ([]WeightedIdentity, error) {
 		return out[i].Identity.UserAgent < out[j].Identity.UserAgent
 	})
 	return out, nil
+}
+
+// buildPool is newIdentityPool followed by the weight floor: while some entry
+// of the pool has less than the floor's probability under the model, the
+// lightest one leaves the pool and the distribution is recomputed. One at a
+// time, because removing an entry raises the others.
+func buildPool(f *identitymodel.File, c Constraints) (*identityPool, error) {
+	pool, err := newIdentityPool(c)
+	if err != nil {
+		return nil, err
+	}
+	floor := c.minWeight()
+	if floor == 0 {
+		return pool, nil
+	}
+	nw := f.Networks["input"]
+	for {
+		weights := map[poolCell]float64{}
+		for _, o := range nw.Distribution(pool.allow) {
+			k := poolCell{o.Values["*OPERATING_SYSTEM"], o.Values["*DEVICE"], o.Values["*BROWSER_HTTP"]}
+			weights[k] += o.P
+		}
+		if len(weights) == 0 {
+			return nil, ErrNoIdentity
+		}
+		var lightest poolCell
+		lightW := 2.0
+		for k, w := range weights {
+			if w < lightW || (w == lightW && cellLess(k, lightest)) {
+				lightest, lightW = k, w
+			}
+		}
+		if lightW >= floor {
+			return pool, nil
+		}
+		delete(pool.byCell, lightest)
+		pool.rebuildCells()
+	}
+}
+
+func cellLess(a, b poolCell) bool {
+	if a.os != b.os {
+		return a.os < b.os
+	}
+	if a.device != b.device {
+		return a.device < b.device
+	}
+	return a.browserHTTP < b.browserHTTP
+}
+
+func (p *identityPool) rebuildCells() {
+	p.cells = map[[2]string]bool{}
+	for k := range p.byCell {
+		p.cells[[2]string{k.os, k.device}] = true
+	}
 }
 
 // identityPool is the set of built-in entries the constraints allow, indexed

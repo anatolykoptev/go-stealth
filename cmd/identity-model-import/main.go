@@ -3,11 +3,17 @@
 // internal/identitymodel.
 //
 //	identity-model-import -in input-network-definition.zip \
-//	    -commit <upstream commit> -committed 2026-11-09 \
+//	    -package header-generator@2.1.90 -committed 2026-11-09 \
 //	    -out internal/identitymodel/model.json
 //
 // The output is deterministic: values and leaf entries are sorted, so the same
-// input always gives the same bytes.
+// input always gives the same bytes. Before writing, the converted model must
+// pass the freshness guard (see checkFresh): a stale or incomplete model is
+// refused and nothing is written.
+//
+// With -print and no other flag it lists the shipped model's version, the
+// Chrome majors it knows and the default identity distribution, which the
+// refresh job diffs before and after an import.
 package main
 
 import (
@@ -21,6 +27,7 @@ import (
 	"os"
 	"sort"
 
+	stealth "github.com/anatolykoptev/go-stealth"
 	"github.com/anatolykoptev/go-stealth/internal/identitymodel"
 )
 
@@ -33,21 +40,30 @@ type srcNode struct {
 
 func main() {
 	in := flag.String("in", "", "upstream input-network-definition.zip")
-	commit := flag.String("commit", "", "upstream commit the file was taken from")
-	committed := flag.String("committed", "", "upstream commit date, YYYY-MM-DD")
+	commit := flag.String("commit", "", "upstream commit the file was taken from, when known")
+	pkg := flag.String("package", "", "npm package the file was taken from, e.g. header-generator@2.1.90")
+	committed := flag.String("committed", "", "upstream commit or release date, YYYY-MM-DD")
 	out := flag.String("out", "", "model file to write")
+	print := flag.Bool("print", false, "print the shipped model's version, Chrome majors and default distribution, then exit")
 	flag.Parse()
-	if *in == "" || *out == "" || *commit == "" || *committed == "" {
+	if *print {
+		if err := printSummary(os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "identity-model-import:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *in == "" || *out == "" || *committed == "" || (*commit == "" && *pkg == "") {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if err := run(*in, *commit, *committed, *out); err != nil {
+	if err := run(*in, *commit, *pkg, *committed, *out); err != nil {
 		fmt.Fprintln(os.Stderr, "identity-model-import:", err)
 		os.Exit(1)
 	}
 }
 
-func run(in, commit, committed, out string) error {
+func run(in, commit, pkg, committed, out string) error {
 	raw, err := os.ReadFile(in)
 	if err != nil {
 		return err
@@ -89,6 +105,7 @@ func run(in, commit, committed, out string) error {
 			Project:   "apify/fingerprint-suite",
 			Licence:   "Apache-2.0",
 			Commit:    commit,
+			Package:   pkg,
 			Committed: committed,
 			File:      "packages/header-generator/src/data_files/input-network-definition.zip",
 			SHA256:    hex.EncodeToString(sum[:]),
@@ -99,8 +116,12 @@ func run(in, commit, committed, out string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := identitymodel.Parse(enc); err != nil {
+	parsed, err := identitymodel.Parse(enc)
+	if err != nil {
 		return fmt.Errorf("converted model does not validate: %w", err)
+	}
+	if err := checkFresh(parsed, stealth.BuiltinProfiles); err != nil {
+		return fmt.Errorf("refusing to import: %w", err)
 	}
 	return os.WriteFile(out, append(enc, '\n'), 0o644)
 }

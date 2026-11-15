@@ -25,7 +25,7 @@ func TestDefaultModelIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if f.Source.Licence != "Apache-2.0" || f.Source.SHA256 == "" || len(f.Source.Commit) != 40 {
+	if f.Source.Licence != "Apache-2.0" || f.Source.SHA256 == "" || (len(f.Source.Commit) != 40 && f.Source.Package == "") {
 		t.Fatalf("incomplete provenance: %+v", f.Source)
 	}
 	nw := f.Networks["input"]

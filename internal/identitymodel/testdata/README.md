@@ -38,10 +38,17 @@ the generator is deterministic. The distribution is the same, which
 
 ## Refreshing the data
 
-    node oracle/apify_marginals.mjs <input-network-definition.zip> > apify_reference.json
-    go run ./cmd/identity-model-import -in <zip> -commit <sha> -committed <date> \
-        -out internal/identitymodel/model.json
-    go test ./internal/identitymodel/ ./ -run 'Upstream|Vectors' -update-identity-vectors
+The `identity-model-refresh` workflow does this monthly (2nd, the day after the
+upstream rebuild) from the newest `header-generator` npm package that is at
+least 24 hours old, and opens a PR; it never merges. By hand:
 
-Review the vector diff before committing: every changed row is an identity that
-moves for a caller who re-derives from a seed.
+    npm pack header-generator@<version>   # data_files/input-network-definition.zip
+    GBN_VERSION=<version> node oracle/apify_marginals.mjs <zip> > apify_reference.json
+    go run ./cmd/identity-model-import -in <zip> -package header-generator@<version> \
+        -committed <release date> -out internal/identitymodel/model.json
+    go test . -run TestGenerateIdentity_Vectors -update-identity-vectors
+
+The importer refuses a model whose newest Chrome is more than 2 majors behind
+our newest built-in profile, or that lacks a Chrome major we ship. Review the
+vector diff before committing: every changed row is an identity that moves for
+a caller who re-derives from a seed.

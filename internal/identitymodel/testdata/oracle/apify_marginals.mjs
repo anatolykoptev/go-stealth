@@ -8,7 +8,7 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { BayesianNetwork } = require('generative-bayesian-network');
-const VERSION = '2.1.90'; // the npm version this was run with
+const VERSION = process.env.GBN_VERSION ?? '2.1.90'; // the npm version this was run with
 
 const N = 200000;
 const net = new BayesianNetwork({ path: process.argv[2] });
