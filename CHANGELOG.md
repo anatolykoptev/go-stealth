@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.31.0](https://github.com/anatolykoptev/go-stealth/compare/v1.30.0...v1.31.0) (2026-11-15)
+
+
+### Added
+
+* edge_156 profile measured on Microsoft Edge 156.0.4314.58 ([#102](https://github.com/anatolykoptev/go-stealth/issues/102)) ([6976016](https://github.com/anatolykoptev/go-stealth/commit/69760166e2634f747c9e2551284b2ee96a4103a1))
+
 ## [1.30.0](https://github.com/anatolykoptev/go-stealth/compare/v1.29.0...v1.30.0) (2026-11-14)
 
 
