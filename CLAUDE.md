@@ -36,6 +36,8 @@ workflow; that block is canonical across the fleet and compared byte for byte, s
   `BuiltinProfiles` is pinned by `TestBuiltinProfilesCoherent`; do not add a UA newer than the TLS
   profile has been measured against. `chrome_156` reuses tls-client's Chrome 152 profile because
   it was measured identical; re-measure the same way (`make fingerprint-wire`) before adding a major.
+  `edge_156` is that profile minus the trust_anchors extension, because a real Edge 156 does not send it
+  (`edge_profile.go`, `testdata/wire/microsoft_edge_156_*`).
 - **`chrome_131` is frozen.** Existing consumers pin it; `wire_chrome131_frozen_test.go` fixes its
   wire bytes. A tls-client bump or a client-wide option meant for newer profiles must not move it.
 - **A fingerprint-oracle failure is a true result.** Fix the profile in a separate reviewed change;

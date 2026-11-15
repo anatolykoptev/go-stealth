@@ -2,6 +2,7 @@ package stealth
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -45,8 +46,10 @@ func TestBuiltinProfilesCoherent(t *testing.T) {
 
 			switch bp.Browser {
 			case "chrome", "edge", "brave":
-				wantFamily := map[string]string{"chrome": "chrome_", "edge": "chrome_", "brave": "brave_"}[bp.Browser]
-				if !strings.HasPrefix(string(bp.TLSProfile), wantFamily) {
+				// Edge 156 has its own TLS profile (edge_156): its ClientHello
+				// differs from Chrome's (testdata/wire/microsoft_edge_156_*).
+				wantFamily := map[string][]string{"chrome": {"chrome_"}, "edge": {"chrome_", "edge_"}, "brave": {"brave_"}}[bp.Browser]
+				if !slices.ContainsFunc(wantFamily, func(f string) bool { return strings.HasPrefix(string(bp.TLSProfile), f) }) {
 					t.Errorf("%s entry rides TLS profile %q, want family %q", bp.Browser, bp.TLSProfile, wantFamily)
 				}
 				if got := ExtractChromeVersion(ua); got != major {

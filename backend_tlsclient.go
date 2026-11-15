@@ -259,7 +259,11 @@ var profileMap = map[TLSProfile]profiles.ClientProfile{
 	// chrome_156 has no profile of its own in tls-client v1.18.0; Chrome_152 is
 	// the newest it ships. Measured: its JA4, ja4_r, peetprint and HTTP/2
 	// fingerprint equal those of installed Google Chrome 156.0.8078.80.
-	ProfileChrome156:   profiles.Chrome_152,
+	ProfileChrome156: profiles.Chrome_152,
+	// edge_156 is Chrome 156's wire without the trust_anchors extension
+	// (0xca34), which Microsoft Edge 156 does not send. Measured on Edge
+	// 156.0.4314.58 (testdata/wire/microsoft_edge_156_*).
+	ProfileEdge156:     withoutTrustAnchors(profiles.Chrome_152),
 	ProfileFirefox133:  profiles.Firefox_133,
 	ProfileFirefox148:  profiles.Firefox_148,
 	ProfileBrave146:    profiles.Brave_146,
@@ -285,9 +289,9 @@ func withFetchPriority(p profiles.ClientProfile) profiles.ClientProfile {
 		&http2.PriorityParam{StreamDep: 0, Exclusive: true, Weight: fetchPriorityWire})
 }
 
-// isChromiumTLSProfile reports whether p is a Chrome-family TLS profile.
+// isChromiumTLSProfile reports whether p is a Chromium-family TLS profile.
 func isChromiumTLSProfile(p TLSProfile) bool {
-	return strings.HasPrefix(string(p), "chrome_") || strings.HasPrefix(string(p), "brave_")
+	return strings.HasPrefix(string(p), "chrome_") || strings.HasPrefix(string(p), "brave_") || strings.HasPrefix(string(p), "edge_")
 }
 
 // extensionOrderRandomised lists the profiles whose browser shuffles its TLS
@@ -300,6 +304,7 @@ var extensionOrderRandomised = map[TLSProfile]bool{
 	ProfileChrome150: true,
 	ProfileChrome152: true,
 	ProfileChrome156: true,
+	ProfileEdge156:   true,
 	ProfileBrave146:  true,
 }
 

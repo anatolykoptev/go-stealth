@@ -17,6 +17,10 @@
 //	chrome_156, default   Google Chrome 156.0.8078.80 (stable, branded)
 //	chrome_152            the same Google Chrome 156 capture: the claim under
 //	                      test is that Chrome_152's wire equals Chrome 156's
+//	edge_156              Microsoft Edge 156.0.4314.58 on Windows (the profile's
+//	                      first entry): ClientHello without trust_anchors, no
+//	                      image/jxl in Accept; User-Agent and sec-ch-ua-platform
+//	                      are compared whole, not by major
 //	chrome_131            pinned to its own recorded wire; the Chrome for
 //	                      Testing 131 capture is shown for information only,
 //	                      because tls-client's contributed Chrome_131 differs
@@ -256,8 +260,13 @@ func TestWireLive(t *testing.T) {
 		// Testing (the chrome_131 reference) is unbranded, so its sec-ch-ua
 		// has no "Google Chrome" brand.
 		infoValues []string
-		varyJA3    bool // true: JA3 must differ across connections; false: must be constant
-		tlsExact   bool
+		// exactIdentity: user-agent and sec-ch-ua-platform are compared whole.
+		// The Chrome 156 capture is macOS and the profile's first entry is
+		// Windows, so those cases compare the major only; the Edge captures
+		// are Windows, the same as the profile's entry.
+		exactIdentity bool
+		varyJA3       bool // true: JA3 must differ across connections; false: must be constant
+		tlsExact      bool
 		// pinned: expected values recorded from this client, used when the
 		// reference is not the right oracle (chrome_131).
 		pinned *liveRef
@@ -290,6 +299,8 @@ func TestWireLive(t *testing.T) {
 		{name: "default navigation", opts: nil, profile: defProfile, ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true, assertOrder: true, assertValues: true},
 		{name: "chrome_152 navigation", opts: []ClientOption{WithProfile(ProfileChrome152)}, profile: bpFor(ProfileChrome152), ref: "google_chrome_156_nav.json", varyJA3: true, tlsExact: true, assertOrder: true},
 		{name: "chrome_156 fetch", opts: []ClientOption{WithProfile(ProfileChrome156), WithFetchMode()}, profile: bpFor(ProfileChrome156), fetch: true, ref: "google_chrome_156_fetch.json", varyJA3: true, assertOrder: true, assertValues: true},
+		{name: "edge_156 navigation", opts: []ClientOption{WithProfile(ProfileEdge156)}, profile: bpFor(ProfileEdge156), ref: "microsoft_edge_156_windows_nav.json", varyJA3: true, tlsExact: true, assertOrder: true, assertValues: true, exactIdentity: true},
+		{name: "edge_156 fetch", opts: []ClientOption{WithProfile(ProfileEdge156), WithFetchMode()}, profile: bpFor(ProfileEdge156), fetch: true, ref: "microsoft_edge_156_windows_fetch.json", varyJA3: true, assertOrder: true, assertValues: true, exactIdentity: true},
 		{name: "chrome_131 navigation", opts: []ClientOption{WithProfile(ProfileChrome131)}, profile: bpFor(ProfileChrome131), ref: "cft_131_nav.json", varyJA3: false, pinned: &pin131, assertValues: true, infoValues: []string{"sec-ch-ua"}},
 	}
 
@@ -348,10 +359,13 @@ func TestWireLive(t *testing.T) {
 					continue
 				}
 				o := last.ref.HTTP2.RequestHeaders[name]
-				if name == "user-agent" {
+				if name == "user-agent" && !c.exactIdentity {
 					o, w = "Chrome/"+ExtractChromeVersion(o), "Chrome/"+ExtractChromeVersion(w)
 				}
 				add("value:"+name, o, w, c.assertValues && !slices.Contains(c.infoValues, name))
+			}
+			if c.exactIdentity {
+				add("value:sec-ch-ua-platform", last.ref.HTTP2.RequestHeaders["sec-ch-ua-platform"], ref.HTTP2.RequestHeaders["sec-ch-ua-platform"], c.assertValues)
 			}
 
 			variance := fmt.Sprintf("%d distinct JA3 over %d connections", len(ja3), liveSamples)
