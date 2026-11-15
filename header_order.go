@@ -77,13 +77,17 @@ func ChromeFetchHeaderOrder(custom []string) []string {
 
 // defaultHeaderOrderFor picks the header order a client uses when the caller
 // gave none: fetch mode gets the fetch order, the modern Chrome profiles the
-// branded-Chrome navigation order, Brave its own, every other profile (chrome_131,
-// 133, 144, Edge, Firefox, Safari) the order it has always had.
+// branded-Chrome navigation order (Edge 156 included), Brave its own, every other
+// profile (chrome_131, 133, 144, Edge on a chrome_ profile, Firefox, Safari) the
+// order it has always had.
 func defaultHeaderOrderFor(id BrowserIdentity, fetchMode bool) []string {
 	switch {
 	case fetchMode:
 		return ChromeFetchHeaderOrder(nil)
-	case id.Browser == "chrome" && extensionOrderRandomised[id.TLSProfile]:
+	case id.Browser == "chrome" && extensionOrderRandomised[id.TLSProfile],
+		// Edge 156 sends the same navigation order as branded Chrome
+		// (testdata/wire/microsoft_edge_156_*_nav.json).
+		id.Browser == "edge" && id.TLSProfile == ProfileEdge156:
 		return slices.Clone(ChromeNavigationHeaderOrder)
 	case id.Browser == "brave" && id.TLSProfile == ProfileBrave146:
 		return slices.Clone(braveNavigationHeaderOrder)

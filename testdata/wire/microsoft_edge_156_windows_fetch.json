@@ -1,0 +1,60 @@
+{
+  "provenance": {
+    "browser": "Microsoft Edge",
+    "version": "156.0.4314.58",
+    "chromium_version": "156.0.8078.80",
+    "build": "stable, branded (preinstalled on the runner image)",
+    "platform": "Windows (windows-2025 GitHub-hosted runner, NT 10.0.26100, x64)",
+    "headless": false,
+    "mode": "fetch",
+    "captured_at": "2026-11-15T01:24:21Z",
+    "endpoint": "https://tls.peet.ws/api/all",
+    "harness": "browser started on a fresh user-data-dir with the echo URL as its command-line URL; response and page calls read back over the DevTools protocol; launch args: --no-first-run --no-default-browser-check",
+    "note": "page fetch() to the same origin with two custom headers (x-custom-1, x-custom-2) and content-type; later connection of the same session, so its TLS part carries pre_shared_key from resumption and is not used for TLS comparison; referer, content-type and the custom headers are left out of request_headers, their names and positions kept in request_header_names"
+  },
+  "tls": {
+    "ja4": "t13d1517h2_8daaf6152771_a87ad97598a9",
+    "ja4_r": "t13d1517h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,0029,002b,002d,0033,44cd,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+    "peetprint_hash": "a82a2c4591e2920411e95d5375bab512"
+  },
+  "http2": {
+    "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+    "priority": {
+      "weight": 220,
+      "exclusive": true,
+      "depends_on": 0
+    },
+    "request_header_names": [
+      "sec-ch-ua-platform",
+      "x-custom-2",
+      "x-custom-1",
+      "sec-ch-ua",
+      "content-type",
+      "sec-ch-ua-mobile",
+      "user-agent",
+      "accept",
+      "sec-fetch-site",
+      "sec-fetch-mode",
+      "sec-fetch-dest",
+      "referer",
+      "accept-encoding",
+      "accept-language",
+      "priority"
+    ],
+    "priority_header": "u=1, i",
+    "request_headers": {
+      "sec-ch-ua-platform": "\"Windows\"",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"Microsoft Edge\";v=\"156\"",
+      "sec-ch-ua-mobile": "?0",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+      "accept": "*/*",
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-dest": "empty",
+      "accept-encoding": "gzip, deflate, br, zstd",
+      "accept-language": "en-US,en;q=0.9",
+      "priority": "u=1, i"
+    }
+  }
+}

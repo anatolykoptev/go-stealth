@@ -1,0 +1,96 @@
+{
+  "provenance": {
+    "browser": "Microsoft Edge",
+    "version": "156.0.4314.58",
+    "chromium_version": "156.0.8078.80",
+    "build": "stable, branded (Microsoft apt package, sha256 adcf4ce88e3eb276083a561efd0cb06b6801f09dcb6585f6cc23c59730414c3d)",
+    "platform": "Linux (ubuntu-24.04 GitHub-hosted runner, x86_64), Xvfb display",
+    "headless": false,
+    "mode": "nav",
+    "captured_at": "2026-11-15T01:24:33Z",
+    "endpoint": "https://tls.peet.ws/api/all",
+    "harness": "browser started on a fresh user-data-dir with the echo URL as its command-line URL; response and page calls read back over the DevTools protocol; launch args: --no-first-run --no-default-browser-check --no-sandbox --disable-gpu",
+    "note": "top-level navigation to the echo endpoint; first connection of a fresh profile"
+  },
+  "tls": {
+    "ja4": "t13d1516h2_8daaf6152771_806a8c22fdea",
+    "ja4_r": "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,44cd,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+    "peetprint_hash": "8f568b2a409b82d0ec24cb84bf3bc3fc"
+  },
+  "http2": {
+    "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+    "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+    "priority": {
+      "weight": 256,
+      "exclusive": true,
+      "depends_on": 0
+    },
+    "request_header_names": [
+      "sec-ch-ua",
+      "sec-ch-ua-mobile",
+      "sec-ch-ua-platform",
+      "upgrade-insecure-requests",
+      "user-agent",
+      "accept",
+      "sec-fetch-site",
+      "sec-fetch-mode",
+      "sec-fetch-user",
+      "sec-fetch-dest",
+      "accept-encoding",
+      "accept-language",
+      "priority"
+    ],
+    "priority_header": "u=0, i",
+    "request_headers": {
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"Microsoft Edge\";v=\"156\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"Linux\"",
+      "upgrade-insecure-requests": "1",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+      "sec-fetch-site": "none",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-user": "?1",
+      "sec-fetch-dest": "document",
+      "accept-encoding": "gzip, deflate, br, zstd",
+      "accept-language": "en-US,en;q=0.9",
+      "priority": "u=0, i"
+    }
+  },
+  "navigator": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "brands": [
+      {
+        "brand": "Not:A-Brand",
+        "version": "8"
+      },
+      {
+        "brand": "Chromium",
+        "version": "156"
+      },
+      {
+        "brand": "Microsoft Edge",
+        "version": "156"
+      }
+    ],
+    "fullVersionList": [
+      {
+        "brand": "Not:A-Brand",
+        "version": "8.0.0.0"
+      },
+      {
+        "brand": "Chromium",
+        "version": "156.0.8078.80"
+      },
+      {
+        "brand": "Microsoft Edge",
+        "version": "156.0.4314.58"
+      }
+    ],
+    "platform": "Linux",
+    "platformVersion": "",
+    "architecture": "x86",
+    "bitness": "64",
+    "mobile": false
+  }
+}

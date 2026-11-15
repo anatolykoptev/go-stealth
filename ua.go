@@ -197,7 +197,12 @@ const (
 )
 
 // navigationAcceptFor returns the navigation Accept for the Chrome major in ua.
+// Edge never lists image/jxl in the majors measured (Edge 156 does not, where
+// Chrome 156 does; testdata/wire/microsoft_edge_156_*_nav.json).
 func navigationAcceptFor(ua string) string {
+	if strings.Contains(ua, "Edg/") {
+		return navigationAccept
+	}
 	if maj, err := strconv.Atoi(ExtractChromeVersion(ua)); err == nil && maj >= jxlAcceptFirstMajor {
 		return navigationAcceptFrom156
 	}
