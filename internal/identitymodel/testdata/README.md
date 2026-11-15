@@ -87,6 +87,8 @@ The `identity-model-refresh` workflow does this monthly (2nd, the day after the
 upstream rebuild) from the newest `header-generator` npm package that is at
 least 24 hours old, and opens a PR; it never merges. By hand:
 
+    npm -v                                # must be 11.10 or newer: older npm ignores
+                                          # --min-release-age (Node 26 bundles 11.20)
     npm pack header-generator@<version>   # data_files/input-network-definition.zip
     cd oracle && npm install --package-lock-only --ignore-scripts --min-release-age 1 \
         --save-exact generative-bayesian-network@<version> && npm ci --ignore-scripts

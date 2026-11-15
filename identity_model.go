@@ -82,10 +82,12 @@ type GeneratedIdentity struct {
 	ModelVersion string
 	// PoolVersion labels the set of identities the draw chose among: a hash
 	// of every candidate entry (OS, device, model value, TLS profile,
-	// User-Agent) after the constraints and the weight floor, and of the
-	// floor. A change to the built-in profile set, to DefaultMinWeight or to
-	// the constraints changes it. It is a label of this implementation, not
-	// something another language reproduces.
+	// browser, User-Agent) left after the constraints and the weight floor.
+	// A change to the built-in profile set, or to a constraint or the floor
+	// that changes which entries remain, changes it. Constraints.Locales is
+	// not part of it: it changes the locale draw, so keep the locale list
+	// with the stored identity. The label belongs to this implementation;
+	// another language does not reproduce it.
 	PoolVersion string
 }
 
@@ -176,7 +178,7 @@ func GenerateIdentity(seed uint64, c Constraints) (GeneratedIdentity, error) {
 		Locale:          locale,
 		AcceptLanguage:  al,
 		ModelVersion:    f.Source.Version(),
-		PoolVersion:     pool.version(c.minWeight()),
+		PoolVersion:     pool.version(),
 	}, nil
 }
 
@@ -192,7 +194,7 @@ func IdentityPoolVersion(c Constraints) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return pool.version(c.minWeight()), nil
+	return pool.version(), nil
 }
 
 // IdentityDistribution returns every identity GenerateIdentity can draw under
@@ -278,15 +280,15 @@ func buildPool(f *identitymodel.File, c Constraints) (*identityPool, error) {
 	}
 }
 
-// version hashes every cell of the pool with the entry behind it, and the
-// floor, into a short label.
-func (p *identityPool) version(floor float64) string {
-	lines := make([]string, 0, len(p.byCell)+1)
+// version hashes every cell of the pool with the entry behind it into a short
+// label. The weight floor is not hashed: it acts only by removing cells, so the
+// pool that remains already carries its effect.
+func (p *identityPool) version() string {
+	lines := make([]string, 0, len(p.byCell))
 	for k, bp := range p.byCell {
 		lines = append(lines, strings.Join([]string{k.os, k.device, k.browserHTTP, string(bp.TLSProfile), bp.Browser, bp.UserAgent}, "|"))
 	}
 	sort.Strings(lines)
-	lines = append(lines, fmt.Sprintf("floor=%g", floor))
 	h := sha256.Sum256([]byte(strings.Join(lines, "\n")))
 	return hex.EncodeToString(h[:6])
 }

@@ -30,6 +30,7 @@ env:
     internal/identitymodel/testdata/apify_reference.json
     internal/identitymodel/testdata/oracle/package.json
     internal/identitymodel/testdata/oracle/package-lock.json
+    internal/identitymodel/testdata/oracle/pool.json
     testdata/identity_model_vectors.json
     SUMMARY.md
 
@@ -51,6 +52,21 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+      # npm 11.10 added --min-release-age; the runner image's own npm is older,
+      # and an older npm turns the unknown flag into a package name instead of
+      # failing. Node 26 bundles npm 11.20 (nodejs.org/dist/index.json).
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - name: Require an npm that has --min-release-age
+        run: |
+          set -euo pipefail
+          v=$(npm -v)
+          IFS=. read -r major minor _ <<<"$v"
+          echo "node $(node -v), npm $v"
+          if [ "$major" -lt 11 ] || { [ "$major" -eq 11 ] && [ "$minor" -lt 10 ]; }; then
+            echo "npm $v is older than 11.10: --min-release-age would be ignored"; exit 1
+          fi
 
       # Each package is resolved and age-checked on its own: header-generator
       # pins an exact generative-bayesian-network, and both must be at least 24
@@ -175,22 +191,23 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: identity-model-refresh
-          path: stage
+          path: ${{ runner.temp }}/stage
       - name: Open the pull request
         env:
           VERSION: ${{ needs.build.outputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          stage="$RUNNER_TEMP/stage"
           [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "unexpected version '$VERSION'"; exit 1; }
           # The artifact must hold exactly the allowed regular files, nothing else.
           want=$(for p in $ALLOWED_PATHS; do echo "$p"; done | sort)
-          have=$(cd stage && find . -type f -o -type l | sed 's|^\./||' | sort)
+          have=$(cd "$stage" && find . -type f -o -type l | sed 's|^\./||' | sort)
           [ "$want" = "$have" ] || { echo "artifact paths differ from the allowed list:"; diff <(echo "$want") <(echo "$have") || true; exit 1; }
-          if find stage -type l | grep -q .; then echo "artifact contains a symlink"; exit 1; fi
+          if find "$stage" -type l | grep -q .; then echo "artifact contains a symlink"; exit 1; fi
           for p in $ALLOWED_PATHS; do
             [ "$p" = SUMMARY.md ] && continue
-            cp "stage/$p" "$p"
+            cp "$stage/$p" "$p"
           done
           # After the copy only allowed paths may differ from the checkout.
           changed=$(git status --porcelain --untracked-files=all | sed 's/^...//' | sort)
@@ -208,4 +225,4 @@ jobs:
           git push origin "$branch"
           gh pr create --base main --head "$branch" \
             --title "chore(identity-model): refresh to header-generator $VERSION" \
-            --body-file stage/SUMMARY.md
+            --body-file "$stage/SUMMARY.md"

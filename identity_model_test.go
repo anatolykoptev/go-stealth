@@ -476,8 +476,24 @@ func TestPoolVersionTracksTheProfileSet(t *testing.T) {
 	}
 	BuiltinProfiles = saved
 
-	// The floor is part of the version.
-	if v, _ := IdentityPoolVersion(Constraints{MinWeight: 0.02}); v == before {
-		t.Fatal("changing the floor did not change PoolVersion")
+	// Only the TLS profile of an entry changes: the cell and text are the same.
+	retargeted := append([]BrowserProfile(nil), saved...)
+	retargeted[0].TLSProfile = ProfileChrome152
+	BuiltinProfiles = retargeted
+	if v, _ := IdentityPoolVersion(c); v == before {
+		t.Fatal("changing only an entry's TLS profile did not change PoolVersion")
+	}
+	BuiltinProfiles = saved
+
+	// The floor acts through the pool it leaves. A floor that prunes a cell
+	// changes the version; floors that prune nothing do not.
+	pruned, _ := IdentityPoolVersion(Constraints{})
+	if pruned == before {
+		t.Fatal("a floor that removes cells did not change PoolVersion")
+	}
+	for _, f := range []float64{0.0001, 0.0002} {
+		if v, _ := IdentityPoolVersion(Constraints{MinWeight: f}); v != before {
+			t.Fatalf("floor %v prunes nothing yet changed PoolVersion", f)
+		}
 	}
 }
