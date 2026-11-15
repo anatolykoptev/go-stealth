@@ -1,0 +1,15 @@
+go-stealth
+Copyright The go-stealth authors
+
+This product includes data derived from fingerprint-suite
+(https://github.com/apify/fingerprint-suite), Copyright Apify Technologies
+s.r.o., licensed under the Apache License, Version 2.0.
+
+The file internal/identitymodel/model.json is the browser-identity network of
+that project (packages/header-generator/src/data_files/input-network-definition.zip),
+converted by cmd/identity-model-import into this repository's own JSON format.
+The probabilities are unchanged; the structure of the file, the ordering of
+entries and the numbering of values are new. The sampling rules in
+internal/identitymodel follow the project's generative-bayesian-network package
+and are reimplemented in Go. The upstream commit, its date and the SHA-256 of
+the imported file are recorded in the model file's "source" field.
