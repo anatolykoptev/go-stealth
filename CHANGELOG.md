@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.32.0](https://github.com/anatolykoptev/go-stealth/compare/v1.31.0...v1.32.0) (2026-11-15)
+
+
+### Added
+
+* browser identity generator sampled from a real-traffic model ([#98](https://github.com/anatolykoptev/go-stealth/issues/98)) ([c1b765b](https://github.com/anatolykoptev/go-stealth/commit/c1b765be0d6f4308f714e14776bb618e3a226a42))
+
 ## [1.31.0](https://github.com/anatolykoptev/go-stealth/compare/v1.30.0...v1.31.0) (2026-11-15)
 
 
