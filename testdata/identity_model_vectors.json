@@ -14,10 +14,10 @@
   "name": "default",
   "seed": 1,
   "constraints": {},
-  "tls_profile": "chrome_156",
-  "browser": "chrome",
+  "tls_profile": "edge_156",
+  "browser": "edge",
   "os": "windows",
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
   "locale": "en-US",
   "accept_language": "en-US,en;q=0.9"
  },
@@ -124,10 +124,10 @@
   "name": "default",
   "seed": 570153958640793566,
   "constraints": {},
-  "tls_profile": "chrome_156",
-  "browser": "chrome",
+  "tls_profile": "edge_156",
+  "browser": "edge",
   "os": "windows",
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
   "locale": "en-US",
   "accept_language": "en-US,en;q=0.9"
  },
@@ -376,10 +376,10 @@
     "ja-JP"
    ]
   },
-  "tls_profile": "chrome_156",
-  "browser": "chrome",
+  "tls_profile": "edge_156",
+  "browser": "edge",
   "os": "windows",
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
   "locale": "ja-JP",
   "accept_language": "ja-JP,ja;q=0.9"
  },
@@ -556,10 +556,10 @@
     "ja-JP"
    ]
   },
-  "tls_profile": "chrome_156",
-  "browser": "chrome",
+  "tls_profile": "edge_156",
+  "browser": "edge",
   "os": "windows",
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
   "locale": "de-DE",
   "accept_language": "de-DE,de;q=0.9"
  }

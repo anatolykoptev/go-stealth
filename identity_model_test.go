@@ -453,12 +453,12 @@ func TestPoolVersionTracksTheProfileSet(t *testing.T) {
 	saved := BuiltinProfiles
 	t.Cleanup(func() { BuiltinProfiles = saved })
 
-	// A new cell: Edge 156 on Linux, which the model knows.
-	edgeLinux := BrowserProfile{
-		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
-		TLSProfile: ProfileChrome156, Browser: "edge", OS: "linux",
+	// A new cell that can never become a real built-in: Chrome 999 on Linux.
+	futureCell := BrowserProfile{
+		UserAgent:  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/999.0.0.0 Safari/537.36",
+		TLSProfile: ProfileChrome156, Browser: "chrome", OS: "linux",
 	}
-	BuiltinProfiles = append(append([]BrowserProfile(nil), saved...), edgeLinux)
+	BuiltinProfiles = append(append([]BrowserProfile(nil), saved...), futureCell)
 	added, err := IdentityPoolVersion(c)
 	if err != nil {
 		t.Fatal(err)
